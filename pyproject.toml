@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdf-obsidian"
+version = "0.1.0"
+description = "Conversão local de PDFs digitais para um vault do Obsidian"
+requires-python = ">=3.12"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+readme = "README.md"
+dependencies = ["PyMuPDF==1.27.2.3", "PySide6==6.10.2", "markdown-it-py==4.2.0"]
+
+[project.optional-dependencies]
+dev = ["pytest==9.0.2"]
+
+[project.scripts]
+pdf-obsidian = "pdf_obsidian.gui:main"
+
+[tool.setuptools.package-data]
+pdf_obsidian = ["qml/*.qml", "qml/components/*.qml", "qml/components/*.js"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

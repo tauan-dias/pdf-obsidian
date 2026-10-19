@@ -1,0 +1,48 @@
+# Python e ferramentas
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# Documentos de entrada e saídas locais
+*.[pP][dD][fF]
+/Importados/
+/vault/
+/vaults/
+/exports/
+/workspaces/
+/.local/
+
+# Credenciais e configurações privadas
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+/.ssh/
+/.aws/
+/.codex/
+/.agents/
+
+# Editor, sistema e temporários
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
+*~
