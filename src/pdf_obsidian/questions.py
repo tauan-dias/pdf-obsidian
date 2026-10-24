@@ -213,7 +213,9 @@ def serialize_blocks(blocks, state, escape, warnings):
             pending_key.extend(key_pairs(block.text))
             continue
         flush_key()
-        if block.kind == 'image':
+        if block.kind in ('recognized_table', 'recognized_formula'):
+            output.append(block.text)
+        elif block.kind == 'image':
             output.append(f'![{block.text} — página {block.page}]({block.asset})')
         elif block.heading_level or block.role == 'exam_section':
             state.section_level = min(6, block.heading_level + 1) if block.heading_level else 2

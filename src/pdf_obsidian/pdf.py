@@ -7,6 +7,39 @@ class PDFError(ValueError):
     pass
 
 
+def displayed_text(page, data):
+    """Geometria extraída no mesmo espaço visual dos pixmaps e recortes."""
+    matrix = page.rotation_matrix
+    def box(value):
+        return tuple(pymupdf.Rect(value) * matrix)
+    for block in data['blocks']:
+        block['bbox'] = box(block['bbox'])
+        for line in block.get('lines', ()):
+            line['bbox'] = box(line['bbox'])
+            direction = pymupdf.Point(line.get('dir', (1, 0)))
+            line['dir'] = tuple(direction * matrix - pymupdf.Point(0, 0) * matrix)
+            for span in line['spans']:
+                span['bbox'] = box(span['bbox'])
+                if 'origin' in span:
+                    span['origin'] = tuple(pymupdf.Point(span['origin']) * matrix)
+    return data
+
+
+def displayed_tables(page):
+    """Evitar a normalização destrutiva de CropBox feita por find_tables.
+
+    A rotação muda apenas no documento aberto em memória, nunca na origem.
+    O detector recebe coordenadas não rotacionadas e devolvemos espaço visual.
+    """
+    rotation, matrix = page.rotation, page.rotation_matrix
+    try:
+        page.set_rotation(0)
+        return [tuple(pymupdf.Rect(table.bbox) * matrix)
+                for table in page.find_tables().tables]
+    finally:
+        page.set_rotation(rotation)
+
+
 def open_pdf(path: Path):
     try:
         doc = pymupdf.open(path)

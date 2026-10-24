@@ -82,7 +82,7 @@ def vector_signature(rect, drawings):
     return sha256(json.dumps(paths, sort_keys=True).encode()).hexdigest()
 
 
-def recurring_margins(pages, regions):
+def recurring_margins(pages, regions, check=lambda: None):
     """Retornar índices (página, região) com identidade e geometria recorrentes.
 
     Cada grupo inteiro precisa caber na tolerância; não encadear deslocamentos
@@ -90,7 +90,9 @@ def recurring_margins(pages, regions):
     """
     groups = defaultdict(list)
     for page, items in zip(pages, regions):
+        check()
         for index, (rect, kind, digest) in enumerate(items):
+            check()
             zone = margin_zone(rect, page.height)
             if not zone or kind not in ('image', 'figure') or not digest:
                 continue
@@ -99,19 +101,22 @@ def recurring_margins(pages, regions):
             key = kind, zone, digest
             candidates = groups[key]
             group = next((group for group in candidates if all(
-                max(*(item[2][axis] for item in group), geometry[axis])
-                - min(*(item[2][axis] for item in group), geometry[axis]) <= .005 + 1e-9
+                max(group['max'][axis], geometry[axis])
+                - min(group['min'][axis], geometry[axis]) <= .005 + 1e-9
                 for axis in range(4))), None)
             if group is None:
-                group = []
+                group = {'items': [], 'min': geometry, 'max': geometry}
                 candidates.append(group)
-            group.append((page.number, index, geometry))
+            group['items'].append((page.number, index, geometry))
+            group['min'] = tuple(min(a, b) for a, b in zip(group['min'], geometry))
+            group['max'] = tuple(max(a, b) for a, b in zip(group['max'], geometry))
     filtered = {}
     for (_, zone, digest), candidates in groups.items():
         for group in candidates:
-            count = len({item[0] for item in group})
+            check()
+            count = len({item[0] for item in group['items']})
             if count >= max(3, len(pages) * .7):
                 reason = f'Elemento recorrente no {zone}: {count} de {len(pages)} páginas, mesma identidade e posição.'
-                for page, index, _ in group:
+                for page, index, _ in group['items']:
                     filtered[page, index] = reason, digest
     return filtered

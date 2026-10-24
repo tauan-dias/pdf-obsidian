@@ -49,13 +49,21 @@ def loaded_window(app, monkeypatch):
     app.processEvents()
     def wait(predicate=None):
         if predicate is None:
-            predicate = lambda: not window.busy and not window.batch.running
+            predicate = lambda: (not window.busy and not window.batch.running
+                                 and not window.render_timer.isActive())
         deadline = time.monotonic() + 20
-        while not predicate():
+        settled = False
+        while True:
             app.processEvents()
-            QTest.qWait(5)
+            if predicate():
+                if settled:
+                    break
+                settled = True
+            else:
+                settled = False
+            # Let deferred scroll restoration/layout run before the next action.
+            QTest.qWait(20)
             assert time.monotonic() < deadline, 'Operação não terminou.'
-        app.processEvents()
     try:
         yield window, wait, errors
         assert not errors
@@ -555,7 +563,7 @@ def test_worker_finishes_export_when_cancel_arrives_during_write(sources, tmp_pa
     run(commands, events, cancel)
     message = events.get_nowait()
     assert message[:4] == ('batch', 'token', 'item', 'exported')
-    assert (Path(message[-1]) / 'original.pdf').read_bytes() == sources[0].read_bytes()
+    assert (Path(message[5]) / 'original.pdf').read_bytes() == sources[0].read_bytes()
     assert not list((vault / 'Importados').glob('.pdf-obsidian-*'))
 
 
@@ -688,3 +696,18 @@ def test_worker_death_stops_batch_and_keeps_finished_documents(loaded_window, so
     assert not window.export_button.isEnabled()
     assert not window.batch_button.isEnabled()
     assert len(errors) == 1 and 'inesperadamente' in errors.pop()
+
+
+def test_explicit_preview_refresh_consumes_deferred_rebuild_and_keeps_selection(loaded_window,sources,monkeypatch):
+    window,wait,_=loaded_window
+    monkeypatch.setattr(QFileDialog,'getOpenFileName',lambda *a:(str(sources[0]),'PDF'))
+    window.open_pdf();wait()
+    window.preview_timer.start(50)
+    window.refresh_preview()
+    assert not window.preview_timer.isActive()
+    window.preview.selection_mode.setChecked(True)
+    selected=next(iter(window.preview.targets.values()))
+    window.preview.selected_images.add(selected)
+    window.preview.selection_changed.emit()
+    QTest.qWait(100)
+    assert window.preview.selected_images=={selected}

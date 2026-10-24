@@ -5,7 +5,7 @@ import re
 from uuid import uuid4
 
 from PySide6.QtCore import QPoint, Qt, QUrl
-from PySide6.QtGui import QColor, QTextCharFormat, QTextCursor, QTextDocument
+from PySide6.QtGui import QColor, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument
 
 from .tokens import COLORS
 
@@ -16,14 +16,22 @@ PAGE_MARKER = re.compile(r"(?m)^[ \t]*<!--[ \t]*Página[ \t]+([1-9]\d*)[ \t]*-->
 
 
 def unique_markers(markdown):
-    matches = list(PAGE_MARKER.finditer(markdown))
+    from .markdown import analyse_markdown
+    protected = analyse_markdown(markdown).protected_lines
+    matches = []
+    offset = 0
+    for number, line in enumerate(markdown.splitlines(keepends=True)):
+        if number not in protected:
+            match = PAGE_MARKER.match(markdown, offset, offset + len(line.rstrip('\r\n')))
+            if match:
+                matches.append(match)
+        offset += len(line)
     counts = Counter(int(match[1]) for match in matches)
     return {int(match[1]): match for match in matches if counts[int(match[1])] == 1}
 
 
-def preview_document(markdown: str, workspace: Path, parent=None):
+def preview_document(markdown: str, workspace: Path, parent=None, *, link_color=None):
     """Instalar âncoras Qt após o parser; HTML <a> vazio é descartado por ele."""
-    markers = unique_markers(markdown)
     nonce = uuid4().hex
     tokens = {}
     aligned_tokens = {}
@@ -45,10 +53,11 @@ def preview_document(markdown: str, workspace: Path, parent=None):
     for start, end, replacement in reversed(replacements):
         lines[start:end] = [replacement]
     markdown = "".join(lines)
+    markers = unique_markers(markdown)
 
     def replace(match):
         page = int(match[1])
-        if page not in markers:
+        if page not in markers or markers[page].span() != match.span():
             return match[0]
         token = f"PDFObsidian{nonce}Page{page}End"
         tokens[page] = token
@@ -77,6 +86,14 @@ def preview_document(markdown: str, workspace: Path, parent=None):
     # Style the presentation document only; source/export and anchors stay intact.
     block = document.begin()
     while block.isValid():
+        if link_color is not None:
+            # Presentation document only: improve reading rhythm without changing source.
+            cursor = QTextCursor(block)
+            block_format = block.blockFormat()
+            block_format.setLineHeight(140, QTextBlockFormat.LineHeightTypes.ProportionalHeight.value)
+            block_format.setTopMargin(16 if block_format.headingLevel() else 4)
+            block_format.setBottomMargin(10)
+            cursor.setBlockFormat(block_format)
         iterator = block.begin()
         while not iterator.atEnd():
             fragment = iterator.fragment()
@@ -85,7 +102,7 @@ def preview_document(markdown: str, workspace: Path, parent=None):
                 cursor.setPosition(fragment.position())
                 cursor.setPosition(fragment.position() + fragment.length(), QTextCursor.MoveMode.KeepAnchor)
                 fmt = QTextCharFormat()
-                fmt.setForeground(QColor(COLORS['accent']))
+                fmt.setForeground(QColor(link_color or COLORS['accent']))
                 cursor.mergeCharFormat(fmt)
             iterator += 1
         block = block.next()

@@ -8,6 +8,8 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
     QHBoxLayout, QPushButton, QFileDialog, QMessageBox, QSplitter, QPlainTextEdit,
     QListWidget, QLabel, QTabWidget, QToolButton, QMenu, QWidgetAction, QStackedWidget)
 
+from .visuals import visual_settings
+from .progress_ui import OperationProgress as QProgressBar
 from .appearance import CheckBox as QCheckBox, apply_theme, tool_icon, COLORS, ElidedLabel, AdaptiveRow
 from .comparison import (preview_document, reading_position, restore_reading_position,
                          scroll_editor_to, unique_markers)
@@ -96,6 +98,23 @@ class Window(SessionWindowMixin, QMainWindow):
         option = QWidgetAction(menu)
         option.setDefaultWidget(self.strip_markers_option)
         menu.addAction(option)
+        self.reduced_motion_option = QCheckBox("Reduzir movimento")
+        self.reduced_motion_option.setChecked(visual_settings().reducedMotion)
+        motion_action = QWidgetAction(menu)
+        motion_action.setDefaultWidget(self.reduced_motion_option)
+        menu.addSeparator()
+        menu.addAction(motion_action)
+        self.reduced_motion_option.toggled.connect(visual_settings().setReducedMotion)
+        visual_settings().reducedMotionChanged.connect(self._sync_motion)
+        self.next_ocr_option = QCheckBox("OCR automático nas próximas conversões")
+        self.next_ocr_option.setChecked(self.application.ocrMode == 'auto')
+        self.next_ocr_option.setToolTip(self.application.recognitionStatus + ' Não altera o documento atual.')
+        ocr_action = QWidgetAction(menu)
+        ocr_action.setDefaultWidget(self.next_ocr_option)
+        menu.addSeparator()
+        menu.addAction(ocr_action)
+        self.next_ocr_option.toggled.connect(lambda enabled: self.application.setOcrMode('auto' if enabled else 'off'))
+        self.application.conversionOptionsChanged.connect(self._sync_ocr_mode)
         self.export_options.setMenu(menu)
         self.export_options.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         open_menu = QMenu(self.open_button)
@@ -223,6 +242,9 @@ class Window(SessionWindowMixin, QMainWindow):
         self.application.progressChanged.connect(self.update_import_state)
         self.application.sourceChanged.connect(self.update_import_state)
         self.application.cancellationChanged.connect(self.update_import_state)
+        self.application.conversionOptionsChanged.connect(self.update_import_state)
+        self.application.conversionStageChanged.connect(self.update_import_state)
+        self.welcome.ocrModeRequested.connect(lambda enabled: self.application.setOcrMode('auto' if enabled else 'off'))
         self.application.conversionCompleted.connect(self.receive_single_document)
         self.application.cropCompleted.connect(self.receive_crop)
         self.application.conversionCancelled.connect(self.conversion_cancelled)
@@ -231,12 +253,22 @@ class Window(SessionWindowMixin, QMainWindow):
         self.application.workerFailed.connect(self.worker_failed)
         self.application.start_polling()
         apply_theme(self)
+        QApplication.instance().fontChanged.connect(self._refresh_theme)
         self.update_controls()
         if self.welcome.load_error:
             self.import_load_failed(self.welcome.load_error)
 
+    def _sync_ocr_mode(self):
+        self.next_ocr_option.setChecked(self.application.ocrMode == 'auto')
+
+    def _refresh_theme(self, _font=None):
+        apply_theme(self)
+
+    def _sync_motion(self):
+        self.reduced_motion_option.setChecked(visual_settings().reducedMotion)
+
     def update_modified(self, *_):
-        self.modified_label.setVisible(self.result is not None and self.editor.document().isModified())
+        self.modified_label.setVisible(self.result is not None and (self.active_session.modified if self.active_session else self.editor.document().isModified()))
 
     def toggle_pdf(self):
         self.set_pdf_visible(self.pdf_panel.isHidden())
@@ -256,6 +288,7 @@ class Window(SessionWindowMixin, QMainWindow):
         self.warnings_toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
 
     def update_controls(self):
+        self.next_ocr_option.setEnabled(not self.busy)
         if self.switching_session:
             return
         batch_running = hasattr(self, "batch") and self.batch.running
@@ -547,6 +580,9 @@ class Window(SessionWindowMixin, QMainWindow):
         self.update_controls()
 
     def refresh_preview(self):
+        # A synchronous refresh consumes the pending deferred rebuild as well.
+        # Otherwise it may clear a new image selection after a session snapshot.
+        self.preview_timer.stop()
         if self.result:
             saved = reading_position(self.preview)
             horizontal = self.preview.horizontalScrollBar().value()
@@ -619,7 +655,9 @@ class Window(SessionWindowMixin, QMainWindow):
     def set_strip_page_markers(self, checked):
         if checked != self.strip_page_markers:
             self.strip_page_markers = checked
-            self.editor.document().setModified(True)
+            if self.active_session:
+                self.active_session.strip_markers = checked
+            self.update_modified()
 
     def apply_cleanup_plan(self, plan, strip_markers):
         if self.busy:
@@ -678,7 +716,9 @@ class Window(SessionWindowMixin, QMainWindow):
             documentsEnabled=not batch_running and self.operation in (None, 'render'),
             documentCount=count, sourceName=self.application.sourceName,
             progressCurrent=self.application.progressCurrent,
-            progressTotal=self.application.progressTotal)
+            progressTotal=self.application.progressTotal,
+            ocrMode=self.application.ocrMode, ocrStatus=self.application.recognitionStatus,
+            conversionStage=self.application.conversionStage)
 
     def import_load_failed(self, message):
         self.statusBar().showMessage('Interface QML indisponível; usando a tela de importação Widgets.')
@@ -714,16 +754,23 @@ class Window(SessionWindowMixin, QMainWindow):
         vault = QFileDialog.getExistingDirectory(self, "Escolher pasta do vault")
         if not vault:
             return
+        self.save_active_session()
+        record = self.active_session.exports.get(str(Path(vault).resolve()))
+        manifest = {}
         try:
             target, signature = self.application.export_document(self.result, vault, self.editor.toPlainText(),
                 strip_page_markers=self.strip_page_markers,
-                cleanup_removals=self.cleanup_removals)
+                cleanup_removals=self.cleanup_removals, record=record, manifest=manifest)
         except Exception as exc:
             QMessageBox.critical(self, "Falha ao salvar", str(exc))
             return
         self.save_active_session()
-        self.active_session.record_export(vault, signature, target)
-        QMessageBox.information(self, "Documento salvo", f"Arquivos gravados em:\n{target}")
+        self.active_session.record_export(vault, signature, target, manifest)
+        title = 'Documento já salvo' if record and record.target == target else 'Documento salvo'
+        message = f'Arquivos gravados em:\n{target}'
+        if record and record.signature == signature and record.target != target:
+            message = 'A publicação anterior está incompleta ou foi alterada e foi preservada.\n\n' + message
+        QMessageBox.information(self, title, message)
 
     def closeEvent(self, event):
         if self.batch.running:

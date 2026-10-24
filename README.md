@@ -1,6 +1,6 @@
 # PDF-Obsidian
 
-Aplicação desktop Linux para converter PDFs digitais de uma coluna em Markdown para Obsidian. Processamento local na CPU, offline, sem serviços externos ou telemetria. A interface Qt Quick utiliza o renderizador disponível no sistema, com alternativa por software.
+Aplicação desktop Linux para converter PDFs digitais, escaneados e mistos em Markdown para Obsidian. Processamento local na CPU, offline, sem serviços externos ou telemetria. A interface Qt Quick utiliza o renderizador disponível no sistema, com alternativa por software.
 
 ## Instalação e execução
 
@@ -10,14 +10,15 @@ Requer Python 3.12 ou superior e um ambiente desktop Linux com suporte ao Qt 6.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
+pdf-obsidian-prepare-ocr
 pdf-obsidian
 ```
 
-Se `venv` ou `pip` não estiver disponível, instale o pacote correspondente à distribuição Linux. As dependências são baixadas na instalação; a execução é offline.
+Se `venv` ou `pip` não estiver disponível, instale o pacote correspondente à distribuição Linux. As dependências e os modelos de reconhecimento são baixados durante a instalação/preparação explícita; a execução é offline. O OCR ocupa espaço adicional e sua primeira página pode demorar mais para carregar os modelos.
 
 ## Fluxo
 
-1. Abra um PDF digital sem senha.
+1. Abra um PDF sem senha. Na importação, mantenha **OCR automático** ativado para reconhecer texto, tabelas e fórmulas quando necessário; a interface informa se os modelos estão preparados.
 2. Confira os avisos e compare o editor ou a prévia com as páginas originais. Se aparecer **Imagens filtradas (N)**, revise as miniaturas e restaure qualquer figura útil omitida.
 3. Corrija o Markdown. Ative **Recortar** e arraste uma região do PDF para inserir um recorte na posição do cursor do editor. Remova manualmente o texto que o recorte substituir, se necessário.
 4. Opcionalmente, selecione imagens manualmente na **Prévia** para removê-las. Para omitir os comentários de página da nota final, abra o menu **⋯** ao lado de **Salvar no vault…** e marque **Remover marcações de página na exportação**.
@@ -26,7 +27,15 @@ Se `venv` ou `pip` não estiver disponível, instale o pacote correspondente à 
 
 A saída fica em `Importados/<nome>/`, com uma nota Markdown, `original.pdf`, `assets/` e `conversao.json`. Os links são relativos. Pastas já existentes recebem sufixo numérico. O PDF original nunca é modificado. Cabeçalhos e rodapés removidos são registrados no relatório. Ao fechar sem salvar, o trabalho temporário é descartado, após confirmação.
 
-Ao salvar novamente no mesmo vault durante a sessão, se o conteúdo e as opções exportáveis forem iguais e a pasta de saída ainda existir, o aplicativo informa **Documento já salvo** e mostra o destino existente, sem criar outra cópia. Alterações, outro vault ou remoção da pasta de saída exigem uma nova exportação; arquivos existentes nunca são sobrescritos.
+Ao salvar novamente no mesmo vault durante a sessão, se o conteúdo e as opções exportáveis forem iguais e todos os arquivos publicados mantiverem tamanho e SHA-256, o aplicativo informa **Documento já salvo** e mostra o destino existente, sem criar outra cópia. Se a publicação estiver incompleta ou tiver sido editada no Obsidian, uma nova cópia é criada e a anterior é preservada. Arquivos extras adicionados pelo usuário não impedem a reutilização. Alterações no documento, outro vault ou remoção da pasta exigem uma nova exportação; arquivos existentes nunca são sobrescritos. A pasta `Importados` não pode apontar por link simbólico para fora do vault selecionado.
+
+## OCR local
+
+A instalação completa prepara Docling, RapidOCR e modelos de tabelas/fórmulas em um ambiente CPU separado, sem Tesseract e sem alterar as dependências da interface. Depois da preparação, o reconhecimento funciona offline. O comando `pdf-obsidian-prepare-ocr --verify` confere os recursos locais; downloads acontecem somente na preparação explícita.
+
+O OCR complementa o texto nativo em páginas mistas e escaneadas. Tabelas reconhecidas viram Markdown ou HTML restrito; fórmulas geram LaTeX. As imagens originais são conservadas para revisão, e resultados incertos geram avisos. Sem modelos disponíveis, a conversão continua com extração direta e imagens. Desmarcar OCR mantém o caminho anterior e não carrega modelos. A opção é capturada no início da conversão ou do lote.
+
+Consulte [OCR.md](OCR.md) para instalação completa, consumo de recursos, configuração offline, cancelamento e limites de reconhecimento. A prévia Qt pode mostrar LaTeX como código, acompanhado da imagem de referência; confira a apresentação final no Obsidian.
 
 ## Conversão em lote
 
@@ -52,9 +61,17 @@ A aba inicial é **Markdown**, com **Prévia** como alternativa. A prévia é pr
 
 Os **Avisos (N)** ficam recolhidos após cada conversão. Expanda a faixa de avisos e clique em um aviso de página para revelar o PDF e navegar até ela.
 
-A interface usa somente modo escuro, com superfícies grafite, bordas discretas e destaque coral. Cores e métricas ficam em `qml/components/Tokens.js`, consumidos por Python e QML e compartilhados com o protótipo; a interface compacta prioriza fontes sans locais como Inter/Adwaita Sans e o editor usa JetBrains Mono/Adwaita Mono, com alternativas nativas quando indisponíveis. A escala respeita o DPI do Qt e aumentos relativos da fonte. As ferramentas de formatação e os grupos do rodapé do lote reorganizam-se quando falta largura, preservando os mesmos controles. Botões, menus, campos e listas têm indicação de foco. A barra do editor reúne Estilo (Parágrafo e Títulos 1–6), ferramentas de texto e de parágrafo em grupos compactos que quebram por inteiro conforme a largura. Listas e citação têm botões diretos; alinhamento permanece em menu. O rótulo Estilo é fixo e não detecta a formatação do cursor. A barra usa ícones vetoriais e botões discretos com hover suave; ferramentas como negrito, itálico, link e desfazer mostram dicas com o atalho após uma breve pausa. A aba ativa tem um marcador coral, distinto da ação principal de salvar. Os ícones são desenhados localmente pelo Qt; não há recursos remotos nem novas dependências. A aparência não altera o PDF ou os arquivos exportados.
+A interface utiliza o design system **Monochrome Premium**: fundo quase preto, superfícies em cinza, hierarquia tipográfica e destaque branco. Geist Sans e Geist Mono são incluídas localmente com suas licenças; fontes alternativas nativas são usadas se houver falha de carregamento. A interface usa corpo de 14 px e controles de 13 px; editor e prévia têm texto-base de 15 px, com escala de fonte e DPI preservadas. Ícones Lucide locais são compartilhados entre QML e Widgets, sem dependências adicionais ou downloads durante o uso. Ferramentas têm contorno por grupo, hover individual e foco de teclado reforçado. Os grupos se reorganizam em painéis estreitos sem esconder comandos. Consulte [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) para tokens, recursos, componentes e critérios de acessibilidade.
 
-Use **Ctrl+O** para abrir um PDF e **Ctrl+S** para salvar o documento ativo no vault. As ferramentas de formatação são acessíveis por Tab; Espaço ativa o botão ou abre o menu. Ao aplicar um comando, o foco retorna ao editor com a seleção preservada. Os atalhos de formatação continuam restritos ao editor.
+O cabeçalho adapta a posição das ações à largura e à fonte, mantendo o nome do documento e o estado de salvamento legíveis. A comparação identifica o **PDF original** e agrupa página, zoom percentual e ajuste; os grupos passam inteiros para outra linha quando necessário. Avisos têm uma faixa de atenção própria, e a seleção manual de imagens explica como desfazer a remoção. Estados de salvamento, falha e exclusão da exportação combinam texto com indicadores visuais.
+
+Menus, dicas, barras de progresso, campos e diálogos compartilham os mesmos tokens. Os diálogos mantêm suas ações fora da área rolável: mensagens extensas e listas podem rolar sem esconder Cancelar, Fechar ou a ação principal. Confirmações de descarte começam com foco em **Cancelar**, e fechar um diálogo devolve o foco ao controle que o abriu. A interface é conferida em janelas a partir de 800 × 600 e com fonte ampliada em 25%, usando documentos sintéticos.
+
+Use **Ctrl+O** para abrir um PDF e **Ctrl+S** para salvar o documento ativo no vault. As ferramentas de formatação são acessíveis por Tab; Espaço ativa o botão ou abre o menu. Ao aplicar um comando, o foco retorna ao editor com a seleção preservada. Os atalhos de formatação continuam restritos ao editor. Com foco nas abas Markdown/Prévia, use as setas esquerda/direita para alternar entre elas. A divisória entre PDF e editor também aceita foco por Tab e ajuste pelas setas esquerda/direita. Ao abrir um documento, o Markdown começa no início; ao retornar a outro documento da sessão, o cursor é restaurado inclusive quando não há seleção.
+
+O editor e a prévia mantêm uma coluna centralizada de até 760 px lógicos, com margens adaptáveis. O Markdown recebe destaque incremental para títulos, ênfase, links, imagens, listas, citações, código e comentários; as marcações continuam visíveis. Menus, campos, barras de rolagem e diálogos usam os mesmos tokens. Avisos, falhas e sucesso são identificados por texto e símbolos, sem depender de cor. O conteúdo original de PDFs e imagens conserva suas cores.
+
+No menu **Opções**, ative **Reduzir movimento** para desativar transições e o movimento dos indicadores indeterminados. A preferência vale somente durante a execução e não altera documentos nem a indicação de alterações não salvas. Os seletores nativos de arquivos e pastas continuam seguindo o tema do sistema.
 
 ## Interface Qt Quick/QML
 

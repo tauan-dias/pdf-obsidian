@@ -8,7 +8,7 @@ from PySide6.QtCore import QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QShortcut, QTextDocument
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QTextBrowser, QVBoxLayout, QWidget
 
-from .appearance import CheckBox as QCheckBox, COLORS
+from .appearance import CheckBox as QCheckBox, COLORS, tool_icon
 from .markdown import analyse_markdown
 
 
@@ -39,6 +39,8 @@ class ImagePreview(QTextBrowser):
         self.selection_count = QLabel("0 selecionadas")
         self.undo_button = QPushButton("Desfazer")
         self.redo_button = QPushButton("Refazer")
+        self.undo_button.setIcon(tool_icon("undo"))
+        self.redo_button.setIcon(tool_icon("redo"))
         top.addWidget(self.undo_button)
         top.addWidget(self.redo_button)
         separator = QFrame()
@@ -52,6 +54,7 @@ class ImagePreview(QTextBrowser):
         self.selection_actions = []
         self.remove_button = QPushButton("Remover selecionadas")
         self.clear_button = QPushButton("Limpar seleção")
+        self.remove_button.setIcon(tool_icon("remove"))
         self.undo_button.setToolTip("Desfazer edição (Ctrl+Z)")
         self.redo_button.setToolTip("Refazer edição (Ctrl+Shift+Z ou Ctrl+Y)")
         for button in (self.remove_button, self.clear_button):

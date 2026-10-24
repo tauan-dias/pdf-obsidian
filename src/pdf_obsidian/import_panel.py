@@ -3,10 +3,12 @@ from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSize, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QFontDatabase
-from PySide6.QtWidgets import (QApplication, QLabel, QPushButton, QProgressBar,
+from PySide6.QtWidgets import (QApplication, QLabel, QPushButton,
                               QStackedLayout, QVBoxLayout, QWidget)
 
-from .appearance import COLORS, ElidedLabel, tool_icon
+from .progress_ui import OperationProgress as QProgressBar
+from .appearance import COLORS, ElidedLabel, tool_icon, CheckBox
+from .visuals import load_fonts, install_icons, visual_settings
 
 
 class LegacyImportPage(QWidget):
@@ -25,6 +27,14 @@ class LegacyImportPage(QWidget):
         description.setObjectName('muted')
         description.setAlignment(Qt.AlignCenter)
         layout.addWidget(description)
+        self.ocr = CheckBox('OCR automático · texto, tabelas e fórmulas')
+        self.ocr.setChecked(True)
+        self.ocr.toggled.connect(panel.ocrModeRequested)
+        layout.addWidget(self.ocr)
+        self.ocr_status = QLabel()
+        self.ocr_status.setWordWrap(True)
+        self.ocr_status.setObjectName('muted')
+        layout.addWidget(self.ocr_status)
         self.open_button = QPushButton('Abrir PDF')
         self.open_button.setObjectName('primary')
         self.open_button.setIcon(tool_icon('open', COLORS['on_accent']))
@@ -49,6 +59,13 @@ class LegacyImportPage(QWidget):
             button.setEnabled(state['canImport'])
         for widget in (self.source, self.progress, self.cancel):
             widget.setVisible(converting)
+        self.ocr.setVisible(not converting)
+        self.ocr.setEnabled(state['canImport'])
+        self.ocr.blockSignals(True)
+        self.ocr.setChecked(state['ocrMode'] == 'auto')
+        self.ocr.blockSignals(False)
+        self.ocr_status.setText(state['ocrStatus'])
+        self.ocr_status.setVisible(not converting)
         self.source.setText(state['sourceName'])
         self.source.setToolTip(state['sourceName'])
         self.progress.setRange(0, state['progressTotal'])
@@ -67,6 +84,7 @@ class ImportPanel(QWidget):
     que mantém os fluxos existentes de seleção, confirmação e sessões.
     """
     openPdfRequested = Signal()
+    ocrModeRequested = Signal(bool)
     batchRequested = Signal()
     documentsRequested = Signal()
     cancelRequested = Signal()
@@ -81,11 +99,14 @@ class ImportPanel(QWidget):
         self._state = dict(converting=False, cancelling=False, canImport=True,
                            documentsEnabled=True, documentCount=0, sourceName='',
                            progressCurrent=0, progressTotal=0, feedback='',
-                           fontFamily=QApplication.font().family(), textScale=self._text_scale())
+                           fontFamily=load_fonts()[0], textScale=self._text_scale(),
+                           reducedMotion=visual_settings().reducedMotion,
+                           ocrMode='auto', ocrStatus='OCR local · português e inglês', conversionStage='')
         self.stack = QStackedLayout(self)
         self.stack.setContentsMargins(0, 0, 0, 0)
         self.setFocusPolicy(Qt.StrongFocus)
         QApplication.instance().fontChanged.connect(self._font_changed)
+        visual_settings().reducedMotionChanged.connect(self._motion_changed)
         try:
             from PySide6.QtQuickWidgets import QQuickWidget
             self.quick = QQuickWidget(self)
@@ -95,11 +116,17 @@ class ImportPanel(QWidget):
             self.stack.addWidget(self.quick)
             self.quick.statusChanged.connect(self._status_changed)
             self.quick.sceneGraphError.connect(self._scene_error)
+            install_icons(self.quick.engine())
             self.quick.setInitialProperties(self._state)
             source = Path(qml_source) if qml_source is not None else Path(__file__).with_name('qml') / 'ImportPage.qml'
             self.quick.setSource(QUrl.fromLocalFile(str(source.resolve())))
         except Exception as exc:
             self._use_fallback(str(exc))
+
+    def _motion_changed(self):
+        self._state['reducedMotion'] = visual_settings().reducedMotion
+        if self.quick and self.quick.rootObject():
+            self.quick.rootObject().setProperty('reducedMotion', self._state['reducedMotion'])
 
     @property
     def state(self):
@@ -124,7 +151,7 @@ class ImportPanel(QWidget):
             if root is None:
                 self._use_fallback('A página QML não foi criada.')
                 return
-            for name in ('openPdfRequested', 'batchRequested', 'documentsRequested', 'cancelRequested'):
+            for name in ('openPdfRequested', 'batchRequested', 'documentsRequested', 'cancelRequested', 'ocrModeRequested'):
                 getattr(root, name).connect(getattr(self, name))
             self._ready = True
             self._apply_state()
@@ -192,9 +219,11 @@ class ImportPanel(QWidget):
     def _font_changed(self, _font=None):
         # QSS may pin a QWidget's inherited font. Follow the application font
         # explicitly so an accessibility font change also reaches the QML text.
-        self.update_state(fontFamily=QApplication.font().family(), textScale=self._text_scale())
+        self.update_state(fontFamily=load_fonts()[0], textScale=self._text_scale(),
+                           reducedMotion=visual_settings().reducedMotion)
 
     def changeEvent(self, event):
         super().changeEvent(event)
         if event.type() in (QEvent.FontChange, QEvent.ApplicationFontChange) and hasattr(self, '_state'):
-            self.update_state(fontFamily=QApplication.font().family(), textScale=self._text_scale())
+            self.update_state(fontFamily=load_fonts()[0], textScale=self._text_scale(),
+                           reducedMotion=visual_settings().reducedMotion)

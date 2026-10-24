@@ -13,8 +13,9 @@ from uuid import uuid4
 from PySide6.QtCore import QObject, Property, QTimer, QUrl, Signal, Slot
 
 from .batch import BatchController
-from .exporter import export_document, export_signature
+from .exporter import export_document, export_signature, export_intact
 from .worker import run
+from .recognition import ConversionOptions, resource_status
 
 
 class WorkerRuntime:
@@ -67,6 +68,8 @@ class ApplicationController(QObject):
     stateChanged = Signal()
     workerAvailabilityChanged = Signal()
     progressChanged = Signal()
+    conversionOptionsChanged = Signal()
+    conversionStageChanged = Signal()
     sourceChanged = Signal()
     cancellationChanged = Signal()
     conversionCompleted = Signal(object)
@@ -87,6 +90,8 @@ class ApplicationController(QObject):
         self._busy = False
         self._operation = ''
         self._progress = (0, 0)
+        self.conversion_options = ConversionOptions()
+        self._conversion_stage = ''
         self._source = ''
         self._cancellation_requested = False
         self._failed = False
@@ -94,6 +99,32 @@ class ApplicationController(QObject):
         self.poll_timer = QTimer(self)
         self.poll_timer.setInterval(80)
         self.poll_timer.timeout.connect(self.poll)
+
+    @Property(str, notify=conversionOptionsChanged)
+    def ocrMode(self):
+        return self.conversion_options.ocr_mode
+
+    @Slot(str)
+    def setOcrMode(self, mode):
+        if self.busy:
+            return
+        options = ConversionOptions(mode)
+        if options != self.conversion_options:
+            self.conversion_options = options
+            self.conversionOptionsChanged.emit()
+
+    @Property(str, constant=True)
+    def recognitionStatus(self):
+        return resource_status()[1]
+
+    @Property(str, notify=conversionStageChanged)
+    def conversionStage(self):
+        return self._conversion_stage
+
+    def set_conversion_stage(self, text):
+        if text != self._conversion_stage:
+            self._conversion_stage = text
+            self.conversionStageChanged.emit()
 
     @Property(bool, notify=stateChanged)
     def busy(self):
@@ -168,15 +199,18 @@ class ApplicationController(QObject):
         workspace = self.runtime.allocate_workspace()
         self.runtime.cancel_event.clear()
         self._source = source
+        self.set_conversion_stage('Extraindo texto e imagens…')
         self._reset_cancellation()
         self.sourceChanged.emit()
         self._set_progress(0, 0)
         self.set_state(True, 'convert')
         if self.tagged_operations:
             self._job_token = uuid4().hex
-            self.runtime.commands.put(('session_convert', self._job_token, source, str(workspace)))
+            self.runtime.commands.put(('session_convert', self._job_token, source, str(workspace),
+                                       *((self.conversion_options,) if self.ocrMode != 'auto' else ())))
         else:
-            self.runtime.commands.put(('convert', source, str(workspace)))
+            self.runtime.commands.put(('convert', source, str(workspace),
+                                       *((self.conversion_options,) if self.ocrMode != 'auto' else ())))
         return True
 
     def start_crop(self, source, workspace, page, bbox):
@@ -197,17 +231,22 @@ class ApplicationController(QObject):
         self.runtime.commands.put(('render', *request))
         return True
 
-    def export_document(self, result, vault, markdown, *, strip_page_markers=False, cleanup_removals=()):
+    def export_document(self, result, vault, markdown, *, strip_page_markers=False, cleanup_removals=(), record=None, manifest=None):
         """Publicação síncrona do adaptador Widgets de recuperação.
 
         A janela Quick usa session_export no worker, com snapshot e identidade.
         """
-        target = export_document(result, vault, markdown,
-                                 strip_page_markers=strip_page_markers,
-                                 cleanup_removals=cleanup_removals)
         signature = export_signature(result, markdown,
                                      strip_page_markers=strip_page_markers,
                                      cleanup_removals=cleanup_removals)
+        if record and record.signature == signature and export_intact(record, vault):
+            if manifest is not None:
+                manifest.clear()
+                manifest.update(record.manifest)
+            return record.target, signature
+        target = export_document(result, vault, markdown,
+                                 strip_page_markers=strip_page_markers,
+                                 cleanup_removals=cleanup_removals, manifest=manifest)
         return target, signature
 
     @Slot()
@@ -233,7 +272,7 @@ class ApplicationController(QObject):
                     continue
                 if kind in ('converted', 'cropped', 'cancelled', 'error'):
                     self._job_token = None
-            elif self.tagged_operations and kind in ('progress', 'converted', 'cropped', 'cancelled', 'error'):
+            elif self.tagged_operations and kind in ('progress', 'stage', 'converted', 'cropped', 'cancelled', 'error'):
                 continue
             if kind == 'filtered_checked':
                 self.filteredReviewCompleted.emit(args)
@@ -242,6 +281,9 @@ class ApplicationController(QObject):
             elif kind == 'batch':
                 if self.batch is not None:
                     self.batch.handle(*args)
+            elif kind == 'stage':
+                if self.operation == 'convert':
+                    self.set_conversion_stage(str(args[0]))
             elif kind == 'progress':
                 if self.operation == 'convert':
                     self._set_progress(*args)
@@ -249,6 +291,7 @@ class ApplicationController(QObject):
                 self.renderCompleted.emit(kind, args)
             elif kind in ('converted', 'cropped', 'cancelled', 'error'):
                 self.set_state(False, None)
+                self.set_conversion_stage('')
                 self._reset_cancellation()
                 if kind == 'converted':
                     self.conversionCompleted.emit(args[0])

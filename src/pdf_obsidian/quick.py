@@ -8,7 +8,7 @@ from urllib.parse import unquote
 from uuid import uuid4
 
 from PySide6.QtCore import QObject, Property, QTimer, QUrl, Signal, Slot, Qt
-from PySide6.QtGui import QFont, QFontDatabase, QImage, QTextCursor, QTextDocument
+from PySide6.QtGui import QFont, QImage, QTextCursor, QTextDocument
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickImageProvider
 from PySide6.QtWidgets import QApplication, QFileDialog
@@ -20,7 +20,11 @@ from .comparison import preview_document, unique_markers
 from .formatting import format_text, link_label
 from .markdown import analyse_markdown, utf16_position
 from .quick_models import RowsModel
-from .tokens import METRICS
+from .tokens import COLORS, REVIEW_METRICS
+from .visuals import load_fonts, install_icons, visual_settings
+from .highlighting import MarkdownHighlighter
+
+REVIEW_TEXT_SIZE = REVIEW_METRICS["editorSize"]
 from .sessions import DocumentSession
 from .models import AssetInfo
 
@@ -64,12 +68,7 @@ class QuickController(QObject):
         QApplication.instance().fontChanged.connect(self.fontChanged)
         native = QApplication.font()
         self._base_font_pixels = native.pixelSize() if native.pixelSize() > 0 else native.pointSizeF() * 96 / 72
-        available = {family.casefold(): family for family in QFontDatabase.families()}
-        def local_family(candidates, fallback):
-            return next((available[name.casefold()] for name in candidates if name.casefold() in available), fallback)
-        self._interface_family = local_family(('Inter', 'Adwaita Sans', 'Cantarell', 'Noto Sans'), native.family())
-        self._editor_family = local_family(('JetBrains Mono', 'JetBrainsMono Nerd Font Mono', 'Adwaita Mono', 'Noto Sans Mono'),
-            QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont).family())
+        self._interface_family, self._editor_family = load_fonts()
         self.sessions = {}
         self._texts = {}
         self.active = None
@@ -143,6 +142,10 @@ class QuickController(QObject):
         self.filtered_timer.setInterval(30)
         self.filtered_timer.timeout.connect(self.dispatch_filtered_review)
 
+    @Property(QObject, constant=True)
+    def visualSettings(self):
+        return visual_settings()
+
     @Property(QFont, notify=fontChanged)
     def nativeFont(self):
         font = QApplication.font()
@@ -199,7 +202,7 @@ class QuickController(QObject):
 
     @Property(bool, notify=changed)
     def modified(self):
-        return bool(self.active and self.active.document.isModified())
+        return bool(self.active and self.active.modified)
 
     @Property(bool, notify=changed)
     def canUndo(self):
@@ -305,15 +308,17 @@ class QuickController(QObject):
 
     def failed(self, message):
         self._crop = None
-        self.dialogRequested.emit('Falha no processamento', message, 'info')
+        self.answer(False)
+        self.dialogRequested.emit('Falha no processamento', message, 'error')
         self.changed.emit()
 
     def worker_failed(self):
+        self.answer(False)
         self.filtered_timer.stop()
         self._filtered_inflight = None
         self._filtered_queue.clear()
         self._export = self._crop = self._inflight = self._queued = None
-        self.dialogRequested.emit('Processo indisponível', 'O processo de PDF terminou. Os documentos concluídos foram preservados. Salve seu texto e reabra a aplicação.', 'info')
+        self.dialogRequested.emit('Processo indisponível', 'O processo de PDF terminou. Os documentos concluídos foram preservados. Salve seu texto e reabra a aplicação.', 'error')
         self.changed.emit()
 
     @Slot(float)
@@ -321,7 +326,7 @@ class QuickController(QObject):
         self._text_scale = max(0.75, scale)
         for session in self.sessions.values():
             font = session.document.defaultFont()
-            font.setPixelSize(round(METRICS["editorSize"] * self._text_scale))
+            font.setPixelSize(round(REVIEW_TEXT_SIZE * self._text_scale))
             session.document.setDefaultFont(font)
         if self.active:
             self._preview_dirty = True
@@ -335,13 +340,16 @@ class QuickController(QObject):
         editor.property('textDocument').setTextDocument(self._empty)
         if self.active:
             self.install_document()
+            state = self.active.view
+            self.selectionRequested.emit(state.get('anchor', 0), state.get('cursor', 0))
 
     def create_session(self, result):
         document = QTextDocument(self)
         font = QFont(self._editor_family)
-        font.setPixelSize(round(METRICS["editorSize"] * self._text_scale))
+        font.setPixelSize(round(REVIEW_TEXT_SIZE * self._text_scale))
         document.setDefaultFont(font)
         document.setPlainText(result.markdown)
+        document.markdown_highlighter = MarkdownHighlighter(document)
         document.setModified(True)
         session = DocumentSession(result, document)
         self.sessions[session.id] = session
@@ -422,6 +430,9 @@ class QuickController(QObject):
         self.filtered.sync([])
         self.install_document()
         self.changed.emit()
+        # Quick resets its cursor when the editor becomes visible/editable.
+        # Restore only after those bindings update, including collapsed cursors.
+        self.selectionRequested.emit(state.get('anchor', 0), state.get('cursor', 0))
         self.render_timer.start()
         self.viewRestored.emit(state)
 
@@ -430,17 +441,16 @@ class QuickController(QObject):
             return
         self.editor.property('textDocument').setTextDocument(self.active.document)
         old, self._preview_doc = self._preview_doc, None
-        self.preview.property('textDocument').setTextDocument(self._empty_preview)
-        if old:
-            old.deleteLater()
+        # Remove old image delegates before Quick lays out the empty document.
         self._images.clear()
         self._native_images.clear()
         self.sync_images()
+        self.preview.property('textDocument').setTextDocument(self._empty_preview)
+        if old:
+            old.deleteLater()
         self._preview_dirty = True
         if self._preview_visible or self.active.view.get('tab') == 1:
             self.preview_timer.start(30)
-        state = self.active.view
-        self.selectionRequested.emit(state.get('anchor', 0), state.get('cursor', 0))
 
     def sync_documents(self):
         rows = []
@@ -495,7 +505,7 @@ class QuickController(QObject):
             if path:
                 self.application.start_conversion(path)
         # Existing batch documents remain available; otherwise replace only on success.
-        if not self.batch.items and any(s.document.isModified() for s in self.sessions.values()):
+        if not self.batch.items and any(s.modified for s in self.sessions.values()):
             self.confirm('As alterações dos documentos abertos serão descartadas ao substituir o documento.', choose)
         else:
             choose()
@@ -511,7 +521,7 @@ class QuickController(QObject):
             self.pending_paths = list(dict.fromkeys(str(Path(p).resolve()) for p in paths))
             self.sync_pending()
             self.batchPreparationRequested.emit()
-        if any(i.session and i.session.document.isModified() for i in self.batch.items):
+        if any(i.session and i.session.modified for i in self.batch.items):
             self.confirm('O lote anterior será substituído, incluindo os documentos desmarcados com alterações não salvas.', choose)
         else:
             choose()
@@ -592,7 +602,7 @@ class QuickController(QObject):
         return True
 
     def export_finished(self, event):
-        token, session_id, revision, ok, value, target, unchanged = event
+        token, session_id, revision, ok, value, target, unchanged, *manifest = event
         if not self._export or tuple(event[:3]) != self._export[:3]:
             return
         vault = self._export[3]
@@ -601,9 +611,13 @@ class QuickController(QObject):
         session = self.sessions.get(session_id)
         if ok:
             if session and session.document.revision() == revision:
-                session.record_export(vault, value, target)
+                session.record_export(vault, value, target, manifest[0] if manifest else None)
             title = 'Documento já salvo' if unchanged else 'Documento salvo'
-            self.dialogRequested.emit(title, 'Arquivos gravados em:\n' + target, 'info')
+            message = 'Arquivos gravados em:\n' + target
+            if len(manifest) > 1 and manifest[1]:
+                title = 'Nova cópia salva'
+                message = 'A publicação anterior está incompleta ou foi alterada e foi preservada.\n\n' + message
+            self.dialogRequested.emit(title, message, 'info')
         else:
             self.failed(value)
         self.sync_documents()
@@ -612,7 +626,6 @@ class QuickController(QObject):
     def setStripMarkers(self, value):
         if self.editable and self.active.strip_markers != value:
             self.active.strip_markers = value
-            self.active.document.setModified(True)
             self.changed.emit()
 
     @Slot()
@@ -648,7 +661,7 @@ class QuickController(QObject):
             self.preview_resize_timer.stop()
             self.application.shutdown()
             self.closeApproved.emit()
-        if any(s.document.isModified() for s in self.sessions.values()):
+        if any(s.modified for s in self.sessions.values()):
             self.confirm('Há documentos com alterações não salvas. Fechar descarta todos os documentos da sessão.', close)
         else:
             close()
@@ -747,13 +760,15 @@ class QuickController(QObject):
             return
         self.previewReplacing.emit()
         old = self._preview_doc
-        doc = preview_document(self.active.document.toPlainText(), self.active.result.workspace, self)
+        doc = preview_document(self.active.document.toPlainText(), self.active.result.workspace, self, link_color=COLORS["accent"])
         font = QFont(self._interface_family)
-        font.setPixelSize(round(METRICS["previewSize"] * self._text_scale))
+        font.setPixelSize(round(REVIEW_TEXT_SIZE * self._text_scale))
         doc.setDefaultFont(font)
         self._preview_doc = doc
         self._native_images = {}
         self.scale_preview_images()
+        self._images.clear()
+        self.sync_images()
         self.preview.property('textDocument').setTextDocument(doc)
         if old:
             old.deleteLater()
@@ -1141,6 +1156,7 @@ class QuickController(QObject):
 
 def create_engine(controller):
     engine = QQmlApplicationEngine()
+    install_icons(engine)
     engine.addImageProvider('pdf', controller.provider)
     engine.destroyed.connect(controller.release_scene)
     engine.load_warnings = []

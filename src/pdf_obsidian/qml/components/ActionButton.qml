@@ -5,47 +5,62 @@ Button {
     id: control
     required property Theme theme
     property bool primary: false
+    property bool destructive: false
     property bool compact: false
     property bool selected: false
+    property bool outlined: !compact
     property string description: ""
     property string shortcutHint: ""
     property bool boldLabel: false
     property bool italicLabel: false
     implicitHeight: Math.max(theme.controlHeight, label.implicitHeight + 12)
-    implicitWidth: Math.max(theme.controlHeight, label.implicitWidth + 20)
+    implicitWidth: Math.max(theme.controlHeight, label.implicitWidth + (destructive ? 44 : 20))
     padding: 6
     horizontalPadding: 10
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.name: description || text
     Accessible.description: shortcutHint
-    ToolTip.visible: hovered && enabled && description.length > 0
-    ToolTip.delay: 650
-    ToolTip.timeout: 4000
-    ToolTip.text: description + (shortcutHint ? "  ·  " + shortcutHint : "")
+    Hint {
+        theme: control.theme
+        visible: control.hovered && control.enabled && control.description.length > 0
+        text: control.description + (control.shortcutHint ? "  ·  " + control.shortcutHint : "")
+    }
     contentItem: Text {
+        textFormat: Text.PlainText
         id: label
         text: control.text
         font.family: control.theme.fontFamily
-        font.pixelSize: control.theme.bodySize
+        font.pixelSize: control.theme.labelSize
         font.weight: control.primary || control.boldLabel ? Font.DemiBold : Font.Normal
         font.italic: control.italicLabel
+        leftPadding: control.destructive ? 20 : 0
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
-        color: !control.enabled ? control.theme.disabled : control.primary ? control.theme.accentText : control.theme.text
+        color: !control.enabled ? control.theme.disabled : control.primary ? control.theme.accentText : control.destructive ? control.theme.danger : control.theme.text
+    }
+    Icon {
+        visible: control.destructive
+        anchors.left: parent.left; anchors.leftMargin: 10
+        anchors.verticalCenter: parent.verticalCenter
+        width: 16; height: 16; name: "remove"
+        tint: control.enabled ? control.theme.text : control.theme.disabled
     }
     background: Rectangle {
         radius: control.theme.controlRadius
-        color: !control.enabled ? (control.compact ? "transparent" : control.theme.surface) :
+        color: !control.enabled ? (control.compact ? "transparent" : control.theme.raised) :
             control.primary ? (control.down ? control.theme.accentPressed : control.hovered ? control.theme.accentHover : control.theme.accent) :
-            control.down ? control.theme.hover : control.hovered || control.selected ? control.theme.raised :
+            control.destructive && (control.hovered || control.down) ? control.theme.dangerSurface :
+            control.down ? control.theme.hover : control.hovered || control.selected ? control.theme.hover :
             control.compact ? "transparent" : control.theme.surface
-        border.width: 1
+        border.width: control.visualFocus ? 2 : 1
         border.color: control.activeFocus ? control.theme.accent :
-            control.compact && !control.hovered && !control.selected ? "transparent" : control.theme.border
+            !control.enabled ? control.theme.border :
+            (control.outlined && (control.hovered || control.down)) || control.selected ? control.theme.controlBorderHover :
+            control.outlined ? control.theme.controlBorder : "transparent"
         opacity: control.enabled ? 1 : 0.65
-        Behavior on color { ColorAnimation { duration: 100 } }
-        Behavior on border.color { ColorAnimation { duration: 100 } }
+        Behavior on color { ColorAnimation { duration: control.theme.motionDuration } }
+        Behavior on border.color { ColorAnimation { duration: control.theme.motionDuration } }
         Rectangle {
             visible: control.selected
             anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter

@@ -10,6 +10,7 @@ FocusScope {
     property string fontFamily: "sans-serif"
     property real textScale: 1.0
     property bool demo: false
+    property bool reducedMotion: false
     property bool converting: false
     property bool cancelling: false
     property bool canImport: true
@@ -19,6 +20,10 @@ FocusScope {
     property int progressCurrent: 0
     property int progressTotal: 0
     property string feedback: ""
+    property string ocrMode: "auto"
+    property string ocrStatus: "OCR local · português e inglês"
+    property string conversionStage: ""
+    signal ocrModeRequested(bool enabled)
     signal openPdfRequested()
     signal batchRequested()
     signal documentsRequested()
@@ -31,7 +36,7 @@ FocusScope {
             openAction.forceActiveFocus(Qt.TabFocusReason);
     }
 
-    Theme { id: tokens; fontFamily: window.fontFamily; textScale: window.textScale }
+    Theme { id: tokens; reducedMotion: window.reducedMotion; fontFamily: window.fontFamily; textScale: window.textScale }
     Rectangle { anchors.fill: parent; color: tokens.background }
 
     ColumnLayout {
@@ -53,6 +58,7 @@ FocusScope {
                     Layout.preferredHeight: 20
                 }
                 Text {
+                    textFormat: Text.PlainText
                     text: "PDF → Obsidian"
                     color: tokens.text
                     font.family: tokens.fontFamily
@@ -60,27 +66,16 @@ FocusScope {
                     font.weight: Font.DemiBold
                     Layout.fillWidth: true
                 }
-                Button {
-                    id: documentsButton
+                ActionButton {
                     objectName: "documentsAction"
+                    theme: tokens
                     visible: window.documentCount > 0
                     enabled: window.documentsEnabled
                     text: "Documentos (" + window.documentCount + ")"
-                    activeFocusOnTab: true
                     onClicked: window.documentsRequested()
-                    contentItem: Text {
-                        text: documentsButton.text
-                        color: documentsButton.enabled ? tokens.text : tokens.disabled
-                        font.family: tokens.fontFamily
-                        font.pixelSize: tokens.captionSize
-                    }
-                    background: Rectangle {
-                        color: documentsButton.hovered ? tokens.hover : tokens.raised
-                        radius: 6
-                        border.color: documentsButton.visualFocus ? tokens.accent : tokens.border
-                    }
                 }
                 Text {
+                    textFormat: Text.PlainText
                     visible: window.demo
                     text: "PROTÓTIPO QML"
                     color: tokens.muted
@@ -101,6 +96,7 @@ FocusScope {
             clip: true
             contentWidth: availableWidth
             contentHeight: page.height
+            ScrollBar.vertical: SurfaceScrollBar { theme: tokens }
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
             Item {
                 id: page
@@ -115,6 +111,7 @@ FocusScope {
                         Layout.fillWidth: true
                         spacing: 12
                         Text {
+                            textFormat: Text.PlainText
                             text: window.converting ? "CONVERSÃO LOCAL" : "IMPORTAR DOCUMENTO"
                             color: tokens.accent
                             font.family: tokens.fontFamily
@@ -123,6 +120,7 @@ FocusScope {
                             font.letterSpacing: 1.5
                         }
                         Text {
+                            textFormat: Text.PlainText
                             text: window.converting ? (window.cancelling ? "Cancelando…" : "Preparando seu Markdown.") : "Do PDF ao seu vault."
                             color: tokens.text
                             font.family: tokens.fontFamily
@@ -132,6 +130,7 @@ FocusScope {
                             wrapMode: Text.WordWrap
                         }
                         Text {
+                            textFormat: Text.PlainText
                             text: window.converting ? "Aguarde a extração do conteúdo. Depois, revise antes de salvar no vault." : "Importe seus documentos, revise o Markdown e salve no Obsidian. Tudo no seu computador."
                             color: tokens.muted
                             font.family: tokens.fontFamily
@@ -141,16 +140,30 @@ FocusScope {
                             wrapMode: Text.WordWrap
                         }
                     }
+                    ColumnLayout {
+                        visible: !window.converting
+                        Layout.fillWidth: true; spacing: 4
+                        Toggle {
+                            objectName: "ocrModeAction"
+                            theme: tokens; text: "OCR automático · texto, tabelas e fórmulas"
+                            Layout.fillWidth: true
+                            checked: window.ocrMode === "auto"; enabled: window.canImport
+                            onToggled: window.ocrModeRequested(checked)
+                        }
+                        Text {
+                            textFormat: Text.PlainText; text: window.ocrStatus
+                            color: tokens.muted; font.family: tokens.fontFamily; font.pixelSize: tokens.captionSize
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap
+                        }
+                    }
                     Rectangle {
                         Layout.fillWidth: true
-                        implicitHeight: cardContent.implicitHeight + tokens.medium * 2
-                        radius: tokens.panelRadius
-                        color: tokens.surface
-                        border.color: tokens.border
+                        implicitHeight: cardContent.implicitHeight
+                        color: "transparent"
                         ColumnLayout {
                             id: cardContent
                             anchors.fill: parent
-                            anchors.margins: tokens.medium
+                            anchors.margins: 0
                             spacing: 12
                             ImportAction {
                                 id: openAction
@@ -181,6 +194,7 @@ FocusScope {
                                 Layout.fillWidth: true
                                 spacing: tokens.medium
                                 Text {
+                                    textFormat: Text.PlainText
                                     objectName: "sourceLabel"
                                     text: window.sourceName
                                     color: tokens.text
@@ -189,44 +203,21 @@ FocusScope {
                                     Layout.fillWidth: true
                                     wrapMode: Text.Wrap
                                 }
-                                ProgressBar {
+                                OperationProgress {
                                     id: progress
+                                    theme: tokens
                                     objectName: "conversionProgress"
                                     Layout.fillWidth: true
-                                    from: 0
-                                    to: Math.max(1, window.progressTotal)
+                                    from: 0; to: Math.max(1, window.progressTotal)
                                     value: Math.min(window.progressCurrent, Math.max(1, window.progressTotal))
                                     indeterminate: window.progressTotal <= 0
                                     Accessible.name: "Progresso da conversão"
-                                    background: Rectangle {
-                                        implicitHeight: 6
-                                        color: tokens.border
-                                        radius: 3
-                                    }
-                                    contentItem: Item {
-                                        implicitHeight: 6
-                                        clip: true
-                                        Rectangle {
-                                            id: indicator
-                                            width: progress.indeterminate ? parent.width * 0.3 : parent.width * progress.visualPosition
-                                            height: parent.height
-                                            radius: 3
-                                            color: tokens.accent
-                                            x: 0
-                                            NumberAnimation on x {
-                                                from: -indicator.width
-                                                to: progress.width
-                                                duration: 1000
-                                                loops: Animation.Infinite
-                                                running: window.converting && progress.indeterminate
-                                                onStopped: indicator.x = 0
-                                            }
-                                        }
-                                    }
                                 }
                                 Text {
+                                    textFormat: Text.PlainText
                                     objectName: "progressLabel"
                                     text: window.cancelling ? "Aguardando o processamento terminar com segurança…"
+                                        : window.conversionStage.length > 0 ? window.conversionStage
                                         : window.progressTotal > 0 ? Math.round(Math.min(1, window.progressCurrent / window.progressTotal) * 100) + "% concluído"
                                         : "Iniciando processamento…"
                                     color: tokens.muted
@@ -259,6 +250,7 @@ FocusScope {
                                     Layout.preferredHeight: 16
                                 }
                                 Text {
+                                    textFormat: Text.PlainText
                                     text: "Seus PDFs originais permanecem intactos."
                                     color: tokens.muted
                                     font.family: tokens.fontFamily
@@ -270,6 +262,7 @@ FocusScope {
                         }
                     }
                     Text {
+                        textFormat: Text.PlainText
                         objectName: "importFeedback"
                         visible: window.feedback.length > 0
                         text: window.feedback
@@ -296,6 +289,7 @@ FocusScope {
                 anchors.leftMargin: tokens.large
                 anchors.rightMargin: tokens.large
                 Text {
+                    textFormat: Text.PlainText
                     text: "Local e offline"
                     color: tokens.muted
                     font.family: tokens.fontFamily
@@ -303,6 +297,7 @@ FocusScope {
                     Layout.fillWidth: true
                 }
                 Text {
+                    textFormat: Text.PlainText
                     text: window.demo ? "Estudo visual · sem conversão" : "PDFs originais preservados"
                     color: tokens.muted
                     font.family: tokens.fontFamily

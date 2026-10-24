@@ -1,4 +1,5 @@
 from collections import Counter
+from contextlib import ExitStack
 from hashlib import sha256
 from pathlib import Path
 import re
@@ -7,6 +8,8 @@ import unicodedata
 from .models import AssetInfo, Block, Page, Warning, ConversionResult, FilteredImage
 from .layout import extract_text_block, reconstruct_page, word_inventory
 from .pdf import open_pdf, render
+from .recognition import ConversionOptions, RecognitionClient, resource_status, resource_directory
+from .recognition_merge import merge_recognition
 from .footers import remove_recurring_footers
 from .questions import prepare_questions, serialize_blocks, QuestionRendering
 from .conversion_filters import deduplicate_text_blocks, margin_zone, recurring_margins, vector_signature
@@ -45,13 +48,36 @@ def repeated_key(block, page):
     return zone, text
 
 
-def convert(source: Path, workspace: Path, progress=None, cancelled=None):
+def raster_has_detail(page, rect):
+    """Skip recognition of uniformly colored images, never remove their assets.
+
+    A tiny visual probe avoids loading OCR for flat placeholders/ornaments on
+    otherwise digital documents. It is not a classifier or an image filter.
+    """
+    import pymupdf
+    scale = min(1., 128 / max(1., rect.width, rect.height))
+    pixmap = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), clip=rect, alpha=False)
+    samples = pixmap.samples
+    if len(samples) < 3:
+        return False
+    return any(max(samples[channel::3]) - min(samples[channel::3]) >= 8 for channel in range(3))
+
+
+def convert(source: Path, workspace: Path, progress=None, cancelled=None, *, options=None, stage=None):
+    options = options or ConversionOptions()
+    if not isinstance(options, ConversionOptions):
+        raise TypeError("Opções de conversão inválidas.")
     source, workspace = Path(source).resolve(), Path(workspace)
     workspace.mkdir(parents=True, exist_ok=True)
     (workspace / "assets").mkdir(exist_ok=True)
     pages, warnings, decisions, assets = [], [], [], []
     sizes = Counter()
     page_regions, filtered_images = [], []
+    recognition = dict(mode=options.ocr_mode, languages=['pt', 'en'], device='cpu',
+                       image_policy='preserve', versions={}, pages=[], peak_bytes=0)
+    client = None
+    ocr_root = resource_directory()
+
 
     def check():
         if cancelled and cancelled():
@@ -59,7 +85,8 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None):
 
     check()
     initial_hash = file_hash(source)
-    with open_pdf(source) as doc:
+    with ExitStack() as stack:
+        doc = stack.enter_context(open_pdf(source))
         title = source.stem
         outline = {item[1].strip().casefold(): item[0] for item in doc.get_toc() if item[1].strip()}
         for index, pdf_page in enumerate(doc):
@@ -68,7 +95,8 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None):
             page = Page(number, pdf_page.rect.width, pdf_page.rect.height)
             # TEXT evita carregar bytes de todas as imagens no resultado de extração.
             import pymupdf
-            data = pdf_page.get_text("dict", flags=pymupdf.TEXTFLAGS_TEXT, sort=True)
+            from .pdf import displayed_text
+            data = displayed_text(pdf_page, pdf_page.get_text("dict", flags=pymupdf.TEXTFLAGS_TEXT, sort=True))
             for source_block, raw in enumerate(deduplicate_text_blocks(data["blocks"], number, decisions)):
                 if raw.get("type") != 0:
                     continue
@@ -76,7 +104,7 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None):
                 if block:
                     page.blocks.append(block)
             if not page.blocks:
-                warnings.append(Warning(number, "Sem texto extraível; OCR indisponível. Use um recorte da página."))
+                warnings.append(Warning(number, "Sem texto extraível nesta página; confira a imagem ou utilize um recorte."))
 
             regions = []
             for block in page.blocks:
@@ -85,17 +113,18 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None):
                     warnings.append(Warning(number, "Possível fórmula preservada como imagem; confira o recorte."))
             # Tabelas reconhecidas são rasterizadas; não transcrever sua geometria como parágrafos.
             try:
-                for table in pdf_page.find_tables().tables:
-                    regions.append((tuple(table.bbox), "table", None))
+                from .pdf import displayed_tables
+                for bbox in displayed_tables(pdf_page):
+                    regions.append((bbox, "table", None))
             except Exception:
                 warnings.append(Warning(number, "Não foi possível analisar tabelas nesta página."))
             for info in pdf_page.get_image_info(hashes=True):
-                regions.append((tuple(info["bbox"]), "image", info["digest"].hex()))
+                regions.append((tuple(pymupdf.Rect(info["bbox"]) * pdf_page.rotation_matrix), "image", info["digest"].hex()))
             # Desenhos vetoriais próximos são agrupados pela própria biblioteca.
             try:
                 drawings = pdf_page.get_drawings()
-                regions.extend((tuple(rect), "figure", vector_signature(rect, drawings)
-                                if margin_zone(rect, page.height) else None)
+                regions.extend((tuple(rect * pdf_page.rotation_matrix), "figure", vector_signature(rect, drawings)
+                                if margin_zone(rect * pdf_page.rotation_matrix, page.height) else None)
                                for rect in pdf_page.cluster_drawings(drawings=drawings))
             except Exception:
                 warnings.append(Warning(number, "Revise figuras vetoriais nesta página."))
@@ -103,7 +132,7 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None):
             for bbox, kind, digest in regions:
                 check()
                 rect = pymupdf.Rect(bbox) & pdf_page.rect
-                if rect.width < 8 or rect.height < 8:
+                if rect.is_empty or rect.is_infinite:
                     continue
                 if any((rect & old).get_area() >= rect.get_area() * .85 for old, _, _ in accepted):
                     continue
@@ -113,18 +142,25 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None):
             if progress:
                 progress(number, len(doc) * 2)
 
-        filtered = recurring_margins(pages, page_regions)
+        filtered = recurring_margins(pages, page_regions, check=check)
         for page, accepted in zip(pages, page_regions):
             check()
             number = page.number
             pdf_page = doc[number - 1]
+            native_blocks = list(page.blocks)
+            # Only raster/structured regions not excluded by the authorized margin
+            # filter are candidates. Pure native pages never load OCR models.
+            candidates = [tuple(rect) for i, (rect, kind, _digest) in enumerate(accepted)
+                          if (number, i) not in filtered and (kind in ('table', 'formula')
+                              or kind == 'image' and raster_has_detail(pdf_page, rect))]
+            attempt = options.ocr_mode == 'auto' and bool(candidates)
             # Uma imagem de fundo pode ter camada de texto: evitar duplicar a página inteira.
             for region_index, (rect, kind, digest) in enumerate(accepted):
                 check()
                 omission = filtered.get((number, region_index))
                 covered = [b for b in page.blocks if
                            (pymupdf.Rect(b.bbox) & rect).get_area() >= pymupdf.Rect(b.bbox).get_area() * .8]
-                if kind == "image" and rect.get_area() > pdf_page.rect.get_area() * .8 and covered:
+                if kind == "image" and rect.get_area() > pdf_page.rect.get_area() * .8 and covered and not attempt:
                     warnings.append(Warning(number, "Imagem de fundo com camada de texto; revise a página e faça recortes se necessário."))
                     continue
                 if kind != "image" and not omission:
@@ -148,6 +184,51 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None):
                 ))
                 if kind == "table":
                     warnings.append(Warning(number, "Tabela preservada como imagem; confira os limites do recorte."))
+            if attempt:
+                check()
+                available, reason, manifest = resource_status(ocr_root)
+                record = dict(page=number, status='unavailable', added_blocks=0, duration_seconds=0,
+                              regions=[list(box) for box in candidates])
+                if available:
+                    recognition['versions'] = manifest.get('versions', {})
+                    recognition['sources'] = manifest.get('sources', [])
+                    if stage:
+                        stage(f'Página {number} de {len(doc)} · reconhecendo texto, tabelas e fórmulas…')
+                    try:
+                        if client is None:
+                            client = RecognitionClient(ocr_root, workspace)
+                            stack.callback(client.close)
+                        directory = workspace / 'ocr'
+                        directory.mkdir(exist_ok=True)
+                        image_path = directory / f'page-{number:04d}.png'
+                        # Limit page raster size, preserving geometry by returning
+                        # page-point coordinates from the isolated image pipeline.
+                        dpi = min(216, 72 * (12_000_000 / max(1, page.width * page.height)) ** .5)
+                        pdf_page.get_pixmap(matrix=pymupdf.Matrix(dpi / 72, dpi / 72), alpha=False).save(image_path)
+                        recognized, elapsed = client.recognize(image_path, number, page.width, page.height, check,
+                            formula_regions=[tuple(rect) for rect, kind, _ in accepted if kind == 'formula'])
+                        count = merge_recognition(page, recognized, native_blocks, candidates, decisions, warnings)
+                        record.update(status='recognized' if count else 'no_additions', added_blocks=count,
+                                      duration_seconds=round(elapsed, 3))
+                        recognition['peak_bytes'] = max(recognition['peak_bytes'], client.peak_bytes)
+                        if count:
+                            warnings[:] = [warning for warning in warnings if not (
+                                warning.page == number and warning.message.startswith('Sem texto extraível'))]
+                    except ConversionCancelled:
+                        raise
+                    except Exception as exc:
+                        record.update(status='failed', error=str(exc)[:2000])
+                        warnings.append(Warning(number, 'Falha no OCR; extração direta e imagens preservadas. ' + str(exc)[:500]))
+                        if client:
+                            client.close()
+                    finally:
+                        if client:
+                            recognition['peak_bytes'] = max(recognition['peak_bytes'], client.peak_bytes)
+                        if stage:
+                            stage(f'Página {number} de {len(doc)} · finalizando extração…')
+                else:
+                    warnings.append(Warning(number, reason + ' Extração direta e imagens preservadas.'))
+                recognition['pages'].append(record)
             # Evidência simples de colunas; a ordem de leitura do MVP é para uma coluna.
             left = [b for b in page.blocks if b.kind == "text" and b.bbox[2] < page.width * .55]
             right = [b for b in page.blocks if b.kind == "text" and b.bbox[0] > page.width * .45]
@@ -188,7 +269,7 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None):
     if initial_hash != file_hash(source):
         raise ValueError("O PDF foi alterado durante a conversão. Abra o arquivo novamente.")
     warnings.insert(0, Warning(0, "Conversão heurística: revise títulos, ordem, tabelas e fórmulas antes de exportar."))
-    return ConversionResult(source, initial_hash, title, "\n\n".join(output) + "\n", workspace, pages, warnings, decisions, assets, filtered_images)
+    return ConversionResult(source, initial_hash, title, "\n\n".join(output) + "\n", workspace, pages, warnings, decisions, assets, filtered_images, recognition)
 
 
 def make_crop(source, workspace, page, bbox):

@@ -5,9 +5,10 @@ from PySide6.QtCore import Qt, QTimer, QSignalBlocker
 from PySide6.QtGui import QColor, QBrush
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
                               QTreeWidget, QTreeWidgetItem, QHeaderView, QFileDialog,
-                              QProgressBar, QMessageBox, QWidget)
+                               QMessageBox, QWidget)
 
-from .appearance import AdaptiveRow, COLORS
+from .progress_ui import OperationProgress as QProgressBar
+from .appearance import AdaptiveRow, COLORS, CheckBox
 
 
 class BatchDialog(QDialog):
@@ -33,6 +34,15 @@ class BatchDialog(QDialog):
         self.description = QLabel('Selecione os PDFs. A conversão não exporta arquivos; você poderá revisar os resultados antes de salvar.')
         self.description.setWordWrap(True)
         layout.addWidget(self.description)
+        if preparing:
+            self.ocr = CheckBox('OCR automático · texto, tabelas e fórmulas')
+            self.ocr.setChecked(window.application.ocrMode == 'auto')
+            self.ocr.toggled.connect(lambda enabled: window.application.setOcrMode('auto' if enabled else 'off'))
+            layout.addWidget(self.ocr)
+            status = QLabel(window.application.recognitionStatus)
+            status.setWordWrap(True)
+            status.setObjectName('muted')
+            layout.addWidget(status)
         self.tree = QTreeWidget()
         self.tree.setAccessibleName("Documentos e estados da conversão")
         self.tree.setAlternatingRowColors(True)
@@ -168,7 +178,7 @@ class BatchDialog(QDialog):
             batch_sessions = {item.session.id for item in self.batch.items if item.session}
             for item in self.batch.items:
                 state = item.status
-                if item.session and item.session.document.isModified():
+                if item.session and item.session.modified:
                     state += ' · Não salvo'
                 if item.export_status:
                     state += ' · ' + item.export_status
@@ -176,7 +186,7 @@ class BatchDialog(QDialog):
                              str(len(item.session.result.warnings)) if item.session else '', item))
             for session in self.window.sessions.values():
                 if session.id not in batch_sessions:
-                    state = 'Fora do lote' + (' · Não salvo' if session.document.isModified() else '')
+                    state = 'Fora do lote' + (' · Não salvo' if session.modified else '')
                     rows.append((session.id, session.result.source.name, state,
                                  str(len(session.result.warnings)), None))
         keys = {key for key, *_ in rows}

@@ -12,6 +12,7 @@ from .models import ConversionResult
 class ExportRecord:
     signature: str
     target: Path
+    manifest: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -23,6 +24,11 @@ class DocumentSession:
     removals: list = field(default_factory=list)
     view: dict = field(default_factory=dict)
     exports: dict[str, ExportRecord] = field(default_factory=dict)
+    saved_strip_markers: bool = False
+
+    @property
+    def modified(self):
+        return self.document.isModified() or self.strip_markers != self.saved_strip_markers
 
     @classmethod
     def create(cls, result, owner):
@@ -34,6 +40,11 @@ class DocumentSession:
         document.setModified(True)
         return cls(result, document)
 
-    def record_export(self, vault, signature, target):
-        self.exports[str(Path(vault).resolve())] = ExportRecord(signature, Path(target))
+    def record_export(self, vault, signature, target, manifest=None):
+        # Widgets publica sincronicamente; Quick/lote recebem o manifesto do worker.
+        if manifest is None:
+            from .exporter import export_manifest
+            manifest = export_manifest(target)
+        self.exports[str(Path(vault).resolve())] = ExportRecord(signature, Path(target), manifest)
+        self.saved_strip_markers = self.strip_markers
         self.document.setModified(False)

@@ -446,7 +446,7 @@ def test_real_worker_quick_conversion_render_crop_and_export(app, tmp_path, manu
         shutil.rmtree(other_target)
         assert c.start_export(other_vault)
         wait(lambda: c.editable)
-        assert other_target.is_dir() and dialogs[-1][0] == 'Documento salvo'
+        assert other_target.is_dir() and dialogs[-1][0] == 'Nova cópia salva'
         assert (original_target / 'original.pdf').read_bytes() == manual_source.read_bytes()
         import pymupdf
         second = tmp_path / 'segundo.pdf'
@@ -533,7 +533,7 @@ def test_native_font_scale_and_small_window_dialogs(quick, tmp_path, app):
     font.setPointSizeF(font.pointSizeF() * 1.25)
     window.setProperty('font', font)
     app.processEvents()
-    assert c.active.document.defaultFont().pixelSize() == round(13 * 1.25)
+    assert c.active.document.defaultFont().pixelSize() == round(15 * 1.25)
     assert c.active.document.toPlainText() == before
     for name in ('documents', 'filteredDialog', 'options', 'linkDialog'):
         dialog = window.findChild(QObject, name)
@@ -622,9 +622,9 @@ def test_open_and_edit_markdown_do_not_prepare_hidden_tools(quick, decorative_so
     result = convert(decorative_source, tmp_path / 'converted')
     builds = []
     original = module.preview_document
-    def build(*args):
+    def build(*args, **kwargs):
         builds.append(True)
-        return original(*args)
+        return original(*args, **kwargs)
     def unexpected(*args):
         raise AssertionError('Restoration must not be analysed while opening the editor.')
     monkeypatch.setattr(module, 'preview_document', build)
@@ -689,9 +689,11 @@ def test_toolbar_hover_is_subtle_and_preserves_markdown_selection(quick, tmp_pat
     assert button.property('compact') and button.property('description') == 'Negrito'
     point = button.mapToScene(QPointF(button.width() / 2, button.height() / 2)).toPoint()
     QTest.mouseMove(window, point)
-    QTest.qWait(120)
+    deadline = time.monotonic() + 1.5
+    while button.property('background').property('color').name() != '#262626':
+        QTest.qWait(10)
+        assert time.monotonic() < deadline
     assert button.property('hovered')
-    assert button.property('background').property('color').name() == '#28292d'
     QTest.mouseClick(window, Qt.LeftButton, pos=point)
     app.processEvents()
     assert c.active.document.toPlainText() == '**Texto** a formatar'
@@ -772,6 +774,7 @@ def test_grouped_toolbar_keyboard_menus_reverse_unicode_and_layout(quick, tmp_pa
     app.processEvents()
     menu = window.findChild(QObject, 'styleMenu')
     assert menu.property('visible')
+    assert menu.property('width') >= 180  # menu labels must not collapse to a narrow strip
     assert c.selection() == (7, 0)
     QTest.keyClick(window, Qt.Key_Down)
     QTest.keyClick(window, Qt.Key_Down)
@@ -812,10 +815,406 @@ def test_grouped_toolbar_keyboard_menus_reverse_unicode_and_layout(quick, tmp_pa
     paragraph = window.findChild(QQuickItem, 'paragraphTools')
     assert paragraph.y() > 0  # whole paragraph group wraps, including its separator
     assert paragraph.x() == 0
-    assert paragraph.childItems()[0].property('opacity') == 0
+    assert paragraph.property('padding') == 3  # group outline remains complete after wrapping
     style.forceActiveFocus()
     QTest.keyClick(window, Qt.Key_Tab)
     assert bold.hasActiveFocus()
     assert c.start_export(tmp_path)
     assert not bold.isEnabled()
     assert not style.isEnabled()
+
+
+@pytest.mark.parametrize('width,height', [(800, 600), (1024, 700), (1300, 850)])
+@pytest.mark.parametrize('scale', [1, 1.25])
+def test_review_controls_fit_supported_windows(quick, tmp_path, app, width, height, scale):
+    """Long document names must not push saving or PDF controls off screen."""
+    from PySide6.QtCore import QPointF
+    from PySide6.QtGui import QFont
+    c, window, _ = quick
+    result = document(tmp_path, name='Guia de estudo com um título muito extenso ' * 5)
+    c.receive(result)
+    original = c.active.document
+    font = QFont(window.property('font'))
+    font.setPointSizeF(font.pointSizeF() * scale)
+    window.setProperty('font', font)
+    window.resize(width, height)
+    QTest.qWait(80)
+    assert window.width() == width and window.height() == height
+    for name in ('saveAction', 'documentTitle', 'documentSaveStatus', 'pageField', 'zoomField', 'cropAction'):
+        item = window.findChild(QQuickItem, name)
+        point = item.mapToScene(QPointF(0, 0))
+        assert item.isVisible() and item.width() > 0
+        assert point.x() >= 0 and point.x() + item.width() <= width + 1
+        assert point.y() >= 0 and point.y() + item.height() <= height + 1
+    toolbar = window.findChild(QQuickItem, 'pdfToolbar')
+    for name in ('pageTools', 'zoomTools'):
+        group = window.findChild(QQuickItem, name)
+        assert group.x() >= 0 and group.x() + group.width() <= toolbar.width() + 1
+    assert c.active.document is original
+    assert original.toPlainText() == result.markdown
+    assert window.findChild(QQuickItem, 'markdownEditor').height() > 100
+    save = window.findChild(QQuickItem, 'saveAction')
+    before = save.mapToScene(QPointF(0, 0))
+    before_width = save.width()
+    c.application.set_state(True, 'export')
+    app.processEvents()
+    assert save.width() == pytest.approx(before_width)
+    assert save.mapToScene(QPointF(0, 0)) == before
+    c.application.set_state(False, '')
+
+
+def test_long_confirmation_scrolls_without_hiding_actions_and_restores_focus(quick, tmp_path, app):
+    from PySide6.QtCore import QMetaObject, QPointF
+    from PySide6.QtGui import QFont
+    c, window, _ = quick
+    c.receive(document(tmp_path, text='ação 💡 texto'))
+    window.resize(800, 600)
+    font = QFont(window.property('font'))
+    font.setPointSizeF(font.pointSizeF() * 1.25)
+    window.setProperty('font', font)
+    window.requestActivate()
+    save = window.findChild(QQuickItem, 'saveAction')
+    save.forceActiveFocus()
+    app.processEvents()
+    original = c.active.document
+    confirmed = []
+    c.confirm('Mensagem extensa para testar a rolagem. ' * 150, lambda: confirmed.append(True))
+    app.processEvents()
+    modal = window.findChild(QObject, 'messageDialog')
+    assert modal.property('visible')
+    assert modal.property('height') <= window.height() - 48
+    message = window.findChild(QQuickItem, 'messageText')
+    assert message.height() > modal.property('contentItem').height()
+    cancel = window.findChild(QQuickItem, 'messageCancelAction')
+    assert cancel.hasActiveFocus()  # opening a destructive dialog starts on its safe action
+    for name in ('messageCancelAction', 'discardAction'):
+        button = window.findChild(QQuickItem, name)
+        point = button.mapToScene(QPointF(0, 0))
+        assert 0 <= point.y() < window.height()
+        assert point.y() + button.height() <= window.height()
+    QTest.keyClick(window, Qt.Key_Escape)
+    app.processEvents()
+    assert not modal.property('visible') and c._pending is None
+    assert not confirmed and save.hasActiveFocus()
+    assert c.active.document is original and original.toPlainText() == 'ação 💡 texto'
+    # Other dialogs return focus to their invoker as well.
+    options = window.findChild(QObject, 'options')
+    assert QMetaObject.invokeMethod(options, 'open')
+    app.processEvents()
+    QTest.keyClick(window, Qt.Key_Escape)
+    app.processEvents()
+    assert save.hasActiveFocus()
+
+
+def test_review_tabs_and_comparison_divider_work_with_keyboard(quick, tmp_path, app):
+    c, window, _ = quick
+    c.receive(document(tmp_path, text='ação 💡 texto'))
+    window.requestActivate()
+    QTest.qWait(50)
+    c.selectionRequested.emit(7, 0)
+    c.format('bold', None)
+    original = c.active.document
+    before = original.toPlainText()
+    divider = window.findChild(QQuickItem, 'comparisonDivider')
+    panel = window.findChild(QQuickItem, 'pdfPanel')
+    divider.forceActiveFocus()
+    width = panel.width()
+    QTest.keyClick(window, Qt.Key_Left)
+    QTest.qWait(30)
+    assert panel.width() < width
+    QTest.keyClick(window, Qt.Key_Right)
+    QTest.qWait(30)
+    assert abs(panel.width() - width) <= 1
+    markdown = window.findChild(QQuickItem, 'markdownTab')
+    preview = window.findChild(QQuickItem, 'previewTab')
+    markdown.forceActiveFocus()
+    QTest.keyClick(window, Qt.Key_Right)
+    app.processEvents()
+    assert window.property('tab') == 1 and preview.hasActiveFocus()
+    QTest.keyClick(window, Qt.Key_Left)
+    app.processEvents()
+    assert window.property('tab') == 0 and markdown.hasActiveFocus()
+    assert c.active.document is original and original.toPlainText() == before
+    c.undo()
+    assert original.toPlainText() == 'ação 💡 texto'
+
+
+def test_opening_long_document_and_restoring_collapsed_cursor(quick, tmp_path, app):
+    """A new document starts at its beginning; returning preserves an unselected cursor."""
+    c, window, _ = quick
+    text = '# Início\n\n' + 'Parágrafo para conferir a posição inicial.\n\n' * 100
+    c.receive(document(tmp_path, text=text))
+    QTest.qWait(80)
+    first = c.active
+    assert c.editor.property('cursorPosition') == 0
+    assert c.selection() == (0, 0)
+    c.editor.setProperty('cursorPosition', 750)
+    second = c.create_session(document(tmp_path, name='Outro'))
+    c.activate(second.id)
+    QTest.qWait(50)
+    c.activate(first.id)
+    QTest.qWait(80)
+    assert c.editor.property('cursorPosition') == 750
+    assert c.selection() == (750, 750)
+    assert first.document.toPlainText() == text and not first.document.isUndoAvailable()
+
+
+def test_batch_escape_cancels_from_fixed_footer(quick, tmp_path, app):
+    """Moving actions outside the scrolling body must preserve Escape cancellation."""
+    from PySide6.QtCore import QMetaObject
+    c, window, _ = quick
+    assert c.batch.start([tmp_path / 'sintetico.pdf'])
+    dialog = window.findChild(QObject, 'documents')
+    assert QMetaObject.invokeMethod(dialog, 'open')
+    window.requestActivate()
+    app.processEvents()
+    cancel = window.findChild(QQuickItem, 'batchCancelAction')
+    cancel.forceActiveFocus()
+    QTest.keyClick(window, Qt.Key_Escape)
+    app.processEvents()
+    assert c.batch.cancel_requested and c.batchCancelling
+    assert dialog.property('visible')  # wait for the running worker to finish safely
+
+
+def test_general_warning_has_no_fake_page_and_page_warning_navigates(quick, tmp_path, app):
+    from PySide6.QtCore import QPointF
+    from pdf_obsidian.models import Warning
+    c, window, _ = quick
+    result = document(tmp_path)
+    result.warnings = [Warning(0, 'Conversão heurística: revise o resultado.'), Warning(2, 'Confira a figura.')]
+    c.receive(result)
+    app.processEvents()
+    window.setProperty('warningsExpanded', True)
+    window.requestActivate()
+    QTest.qWait(60)
+    warning_list = window.findChild(QQuickItem, 'warningsList')
+    rows = {item.objectName(): item for item in warning_list.property('contentItem').childItems()}
+    general = rows.get('warning-0')
+    assert general is not None and not general.isEnabled()
+    assert general.property('contentItem').property('text').startswith('Geral · ')
+    assert c.page == 1
+    specific = rows['warning-2']
+    assert specific.isEnabled()
+    point = specific.mapToScene(QPointF(specific.width() / 2, specific.height() / 2)).toPoint()
+    QTest.mouseClick(window, Qt.LeftButton, pos=point)
+    app.processEvents()
+    assert c.page == 2 and window.property('pdfVisible')
+
+
+def test_worker_failure_cancels_confirmation_and_close_can_be_requested_again(quick, tmp_path, app):
+    c, w, runtime = quick
+    c.receive(document(tmp_path))
+    actions = []
+    c.confirm('Descartar?', lambda: actions.append('discarded'))
+    app.processEvents()
+    c.worker_failed()
+    app.processEvents()
+    dialog = w.findChild(QObject, 'messageDialog')
+    assert not dialog.property('confirmation') and c._pending is None
+    cancel = w.findChild(QQuickItem, 'messageCancelAction')
+    QTest.mouseClick(w, Qt.LeftButton, pos=cancel.mapToScene(cancel.boundingRect().center()).toPoint())
+    QTest.qWait(150)
+    c.requestClose()
+    app.processEvents()
+    assert dialog.property('confirmation') and c._pending is not None
+    c.answer(False)
+    assert not actions
+
+
+def test_info_is_queued_until_confirmation_resolves(quick, tmp_path, app):
+    c, w, runtime = quick
+    c.receive(document(tmp_path))
+    actions = []
+    c.confirm('Descartar?', lambda: actions.append('discarded'))
+    c.dialogRequested.emit('Informação', 'Resultado', 'info')
+    app.processEvents()
+    dialog = w.findChild(QObject, 'messageDialog')
+    assert dialog.property('confirmation')
+    assert w.property('messageQueue').toVariant()[0]['title'] == 'Informação'
+    cancel = w.findChild(QQuickItem, 'messageCancelAction')
+    QTest.mouseClick(w, Qt.LeftButton, pos=cancel.mapToScene(cancel.boundingRect().center()).toPoint())
+    QTest.qWait(200)
+    assert dialog.property('visible') and not dialog.property('confirmation')
+    assert dialog.property('title') == 'Informação'
+    assert c._pending is None and not actions
+
+
+def test_split_geometry_restores_after_keyboard_resize(quick, tmp_path, app):
+    c, w, runtime = quick
+    c.receive(document(tmp_path))
+    a = c.active
+    QTest.qWait(60)
+    panel = w.findChild(QQuickItem, 'pdfPanel')
+    divider = w.findChild(QQuickItem, 'comparisonDivider')
+    w.requestActivate()
+    divider.forceActiveFocus()
+    QTest.keyClick(w, Qt.Key_Left)
+    QTest.qWait(60)
+    a_width = panel.width()
+    b = c.create_session(document(tmp_path, name='B'))
+    c.activate(b.id)
+    QTest.qWait(60)
+    divider.forceActiveFocus()
+    QTest.keyClick(w, Qt.Key_Right)
+    QTest.keyClick(w, Qt.Key_Right)
+    QTest.qWait(60)
+    assert abs(panel.width() - a_width) > 30
+    c.activate(a.id)
+    QTest.qWait(60)
+    assert abs(panel.width() - a_width) < 2
+
+
+def test_discard_button_resolves_confirmation_once(quick, app):
+    c, w, runtime = quick
+    calls = []
+    c.confirm('Descartar?', lambda: calls.append('accepted'))
+    QTest.qWait(100)
+    button = w.findChild(QQuickItem, 'discardAction')
+    QTest.mouseClick(w, Qt.LeftButton, pos=button.mapToScene(button.boundingRect().center()).toPoint())
+    QTest.qWait(150)
+    assert calls == ['accepted'] and c._pending is None
+    c.answer(True)
+    assert calls == ['accepted']
+
+
+def test_option_dirty_indicator_and_close_after_undo(quick, tmp_path, app):
+    c, w, runtime = quick
+    c.receive(document(tmp_path))
+    session = c.active
+    session.record_export(tmp_path, 'signature', tmp_path / 'absent', {})
+    c.replace(0, 0, 'Edicao ')
+    c.setStripMarkers(True)
+    c.undo()
+    assert not session.document.isModified() and c.modified
+    c.requestClose()
+    app.processEvents()
+    assert c._pending is not None
+    c.answer(False)
+    c.setStripMarkers(False)
+    assert not c.modified
+
+
+def test_monochrome_review_reading_column_and_durable_highlighter(quick, tmp_path, app):
+    c, window, _ = quick
+    assert window.property('color').name() == '#090909'
+    a = c.create_session(document(tmp_path, text='# Título\n\n💡 **texto**'))
+    c.activate(a.id)
+    app.processEvents()
+    assert window.property('color').name() == '#090909'
+    highlighter = a.document.markdown_highlighter
+    c.selectionRequested.emit(12, 3)
+    c.replace(0, 0, 'Revisão\n')
+    edited = a.document.toPlainText()
+    b = c.create_session(document(tmp_path, 'B'))
+    c.activate(b.id)
+    c.activate(a.id)
+    assert a.document.markdown_highlighter is highlighter
+    assert highlighter.document() is a.document
+    window.setProperty('pdfVisible', False)
+    app.processEvents()
+    assert c.editor.width() == pytest.approx(760)
+    assert c.editor.x() == pytest.approx((c.editor.parentItem().width() - 760) / 2)
+    c.undo()
+    assert a.document.toPlainText() == '# Título\n\n💡 **texto**'
+    c.redo()
+    assert a.document.toPlainText() == edited
+
+
+def test_reduced_motion_is_visual_global_and_preserves_document_history(quick, tmp_path, app):
+    from PySide6.QtCore import QMetaObject
+    c, window, _ = quick
+    settings = c.visualSettings
+    old = settings.reducedMotion
+    c.receive(document(tmp_path, text='ação 💡 texto'))
+    source = c.active.document
+    c.replace(0, 0, 'Revisão\n')
+    edited = source.toPlainText()
+    source.setModified(False)
+    try:
+        options = window.findChild(QObject, 'options')
+        QMetaObject.invokeMethod(options, 'open')
+        action = window.findChild(QQuickItem, 'reducedMotionAction')
+        action.forceActiveFocus()
+        QTest.keyClick(window, Qt.Key_Space)
+        app.processEvents()
+        assert settings.reducedMotion != old
+        assert window.findChild(QObject, 'importPage').property('reducedMotion') == settings.reducedMotion
+        assert source.toPlainText() == edited and not c.active.modified
+        QMetaObject.invokeMethod(options, 'close')
+        other = c.create_session(document(tmp_path, 'Outra'))
+        previous = c.active.id
+        c.activate(other.id)
+        assert settings.reducedMotion != old
+        c.activate(previous)
+        c.undo()
+        assert source.toPlainText() == 'ação 💡 texto'
+        c.redo()
+        assert source.toPlainText() == edited
+    finally:
+        settings.setReducedMotion(old)
+
+
+def test_preview_image_delegates_are_removed_before_replacing_document(quick, manual_source, tmp_path, app):
+    from PySide6.QtCore import qInstallMessageHandler
+    c, window, _ = quick
+    c.receive(convert(manual_source, tmp_path / 'rendered'))
+    window.setProperty('tab', 1)
+    deadline = time.monotonic() + 2
+    while not c.previewReady:
+        QTest.qWait(10)
+        assert time.monotonic() < deadline
+    assert c._images
+    messages = []
+    previous = qInstallMessageHandler(lambda kind, context, text: messages.append(text))
+    try:
+        c.receive(document(tmp_path, 'Curto', 'Uma nota curta, sem imagens.'))
+        QTest.qWait(80)
+        assert not c._images
+        assert not any('out of range' in message for message in messages), messages
+    finally:
+        qInstallMessageHandler(previous)
+
+
+@pytest.mark.parametrize('tagged', [False, True])
+def test_ocr_mode_is_captured_before_conversion_and_stage_is_displayed(quick, tmp_path, app, tagged):
+    from pdf_obsidian.recognition import ConversionOptions
+    c, window, runtime = quick
+    page = window.findChild(QObject, 'importPage')
+    action = window.findChild(QQuickItem, 'ocrModeAction')
+    action.forceActiveFocus()
+    QTest.keyClick(window, Qt.Key_Space)
+    app.processEvents()
+    assert c.application.ocrMode == 'off' and page.property('ocrMode') == 'off'
+    c.application.tagged_operations = tagged
+    assert c.application.start_conversion(tmp_path/'synthetic.pdf')
+    command = runtime.commands.get_nowait()
+    assert command[0] == ('session_convert' if tagged else 'convert') and command[-1] == ConversionOptions('off')
+    token = command[1] if tagged else None
+    c.application.setOcrMode('auto')
+    assert c.application.ocrMode == 'off'  # live jobs cannot be reconfigured
+    if tagged:
+        runtime.events.put(('session_event','stale','stage','Não deve aparecer'))
+    runtime.events.put(('session_event',token,'stage','Página 1 de 2 · reconhecendo texto…') if tagged else ('stage','Página 1 de 2 · reconhecendo texto…'))
+    c.application.poll()
+    app.processEvents()
+    assert page.property('conversionStage') == 'Página 1 de 2 · reconhecendo texto…'
+    runtime.events.put(('session_event',token,'cancelled') if tagged else ('cancelled',))
+    c.application.poll()
+    assert not c.application.conversionStage
+    c.application.setOcrMode('auto')
+    assert c.application.ocrMode == 'auto'
+
+
+def test_next_conversion_ocr_option_does_not_modify_current_document(quick,tmp_path,app):
+    from PySide6.QtCore import QMetaObject
+    c,window,_=quick
+    c.receive(document(tmp_path,text='Texto original.'))
+    doc=c.active.document
+    doc.setModified(False)
+    options=window.findChild(QObject,'options');QMetaObject.invokeMethod(options,'open')
+    action=window.findChild(QQuickItem,'nextOcrModeAction')
+    action.forceActiveFocus();QTest.keyClick(window,Qt.Key_Space);app.processEvents()
+    assert c.application.ocrMode=='off'
+    assert doc.toPlainText()=='Texto original.' and not c.active.modified
+    assert c.active.document is doc and not doc.isUndoAvailable()
+    QMetaObject.invokeMethod(options,'close')

@@ -48,6 +48,7 @@ class BatchController(QObject):
         self.items = []
         self.token = ''
         self.mode = None
+        self.conversion_options = None
         self.queue = []
         self.ready = []
         self.active = None
@@ -73,6 +74,7 @@ class BatchController(QObject):
         self.items = [BatchItem(path) for path in sources]
         self.ready, self.export_items = [], []
         self.mode = 'convert'
+        self.conversion_options = self.application.conversion_options
         self.queue = self.items.copy()
         self.cancel_requested = False
         self.application.runtime.cancel_event.clear()
@@ -125,7 +127,8 @@ class BatchController(QObject):
             item.status = 'Convertendo'
             self.work = self.application.runtime.allocate_workspace()
             self.message = f'Convertendo {self.items.index(item) + 1} de {len(self.items)}: {item.source.name}'
-            command = ('batch_convert', self.token, item.id, str(item.source), str(self.work))
+            command = ('batch_convert', self.token, item.id, str(item.source), str(self.work),
+                       *((self.conversion_options,) if self.conversion_options.ocr_mode != 'auto' else ()))
         elif self.mode == 'verify':
             self.message = 'Verificando documentos selecionados…'
             record = item.session.exports.get(str(self.vault))
@@ -141,6 +144,10 @@ class BatchController(QObject):
         if token != self.token or not self.active or item_id != self.active.id or not self.running:
             return
         item = self.active
+        if kind == 'stage':
+            self.message = str(args[0])
+            self.changed.emit()
+            return
         if kind == 'progress':
             self.progress = tuple(args)
             self.progress_changed.emit()
@@ -159,14 +166,18 @@ class BatchController(QObject):
             signature, unchanged, target = args
             if unchanged:
                 item.export_status, item.target = 'Já salvo', target
-                item.session.record_export(self.vault, signature, target)
+                item.session.record_export(self.vault, signature, target,
+                                           item.session.exports[str(self.vault)].manifest)
             else:
                 item.export_status = 'A exportar'
+                previous = item.session.exports.get(str(self.vault))
+                if previous and previous.signature == signature:
+                    item.message = 'Publicação anterior alterada ou incompleta; será preservada em outra pasta.'
                 self.ready.append(item)
         elif kind == 'exported':
-            signature, target = args
+            signature, target, *manifest = args
             item.export_status, item.target = 'Salvo', target
-            item.session.record_export(self.vault, signature, target)
+            item.session.record_export(self.vault, signature, target, manifest[0] if manifest else None)
         else:
             item.export_status = 'Cancelado' if kind == 'cancelled' else 'Falhou'
             item.message = str(args[0]) if args else 'Exportação cancelada.'

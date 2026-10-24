@@ -13,7 +13,7 @@ def test_dark_only_and_editor_history(app, monkeypatch):
     try:
         assert not hasattr(window, 'theme_selector')
         assert not hasattr(window, 'settings')
-        assert window.palette().color(QPalette.Window) == QColor('#18191b')
+        assert window.palette().color(QPalette.Window) == QColor('#090909')
         window.editor.setPlainText('Texto original')
         window.editor.moveCursor(QTextCursor.End)
         window.editor.insertPlainText(' editado')
@@ -142,3 +142,21 @@ def test_preview_link_theme_keeps_destination_and_page_anchor(app, tmp_path):
             iterator += 1
         block = block.next()
     assert 'pdf-page-1' in anchors
+
+
+def test_semantic_text_colors_meet_contrast_minimum():
+    """Check the actual text/surface pairs used by shared QML components."""
+    from pdf_obsidian.tokens import COLORS
+
+    def luminance(value):
+        channels = [int(value[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        linear = [c / 12.92 if c <= .04045 else ((c + .055) / 1.055) ** 2.4 for c in channels]
+        return sum(c * weight for c, weight in zip(linear, (.2126, .7152, .0722)))
+
+    pairs = [(fg, bg) for fg in ('text', 'muted') for bg in ('background', 'surface', 'raised', 'hover', 'canvas')]
+    pairs += [('text', 'selection'), ('warning', 'warningSurface'), ('danger', 'dangerSurface')]
+    pairs += [(tone, 'background') for tone in ('success', 'warning', 'danger')]
+    pairs += [('on_accent', bg) for bg in ('accent', 'accentHover', 'accentPressed')]
+    for foreground, background in pairs:
+        light, dark = sorted((luminance(COLORS[foreground]), luminance(COLORS[background])), reverse=True)
+        assert (light + .05) / (dark + .05) >= 4.5, (foreground, background)

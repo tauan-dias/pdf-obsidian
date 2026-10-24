@@ -7,14 +7,14 @@ from PySide6.QtWidgets import (
 )
 
 
-from .appearance import tool_icon
+from .appearance import tool_icon, COLORS
 
 
 class PageView(QLabel):
     selected = Signal(tuple)
 
     def __init__(self):
-        super().__init__("<div style='font-size:20px;color:#eeeff4;'>Seu PDF começa aqui</div>"
+        super().__init__(f"<div style='font-size:20px;color:{COLORS['text']};'>Seu PDF começa aqui</div>"
                          "<br>Abra um documento para comparar o original<br>com o Markdown, lado a lado.")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -134,8 +134,12 @@ class PDFPanel(QWidget):
         navigation.addStretch()
         layout.addLayout(navigation)
         zoom = QHBoxLayout()
-        self.zoom_out = QPushButton("−")
-        self.zoom_in = QPushButton("+")
+        self.zoom_out = QPushButton()
+        self.zoom_out.setIcon(tool_icon("minus"))
+        self.zoom_out.setAccessibleName("Diminuir zoom")
+        self.zoom_in = QPushButton()
+        self.zoom_in.setIcon(tool_icon("plus"))
+        self.zoom_in.setAccessibleName("Aumentar zoom")
         self.zoom_out.setFixedWidth(34)
         self.zoom_in.setFixedWidth(34)
         self.zoom = QDoubleSpinBox()

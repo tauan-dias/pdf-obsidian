@@ -54,8 +54,12 @@ def main():
 
     app = QGuiApplication([sys.argv[0]])
     app.setApplicationName('PDF → Obsidian · Protótipo QML')
+    from pdf_obsidian.visuals import load_fonts, install_icons
+    from PySide6.QtGui import QFont
+    app.setFont(QFont(load_fonts()[0]))
     QQuickStyle.setStyle('Basic')
     engine = QQmlApplicationEngine()
+    install_icons(engine)
     warnings = []
     engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
     engine.setInitialProperties({'width': args.width, 'height': args.height, 'textScale': args.text_scale})

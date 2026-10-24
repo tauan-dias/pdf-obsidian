@@ -24,6 +24,7 @@ ApplicationWindow {
     property int restoreSequence: 0
     property real pendingPreviewY: -1
     property bool cropMode: false
+    property var messageQueue: []
     font: window.backend.nativeFont
     palette.window: theme.background
     palette.windowText: theme.text
@@ -33,7 +34,7 @@ ApplicationWindow {
     palette.buttonText: theme.text
     palette.highlight: theme.accent
     palette.highlightedText: theme.accentText
-    Theme { id: theme; fontFamily: window.font.family; textScale: (window.font.pixelSize > 0 ? window.font.pixelSize : window.font.pointSize * 96 / 72) / window.backend.baseFontPixels; onTextScaleChanged: window.backend.setTextScale(textScale) }
+    Theme { id: theme; reducedMotion: window.backend.visualSettings.reducedMotion; fontFamily: window.font.family; textScale: (window.font.pixelSize > 0 ? window.font.pixelSize : window.font.pointSize * 96 / 72) / window.backend.baseFontPixels; onTextScaleChanged: window.backend.setTextScale(textScale) }
     onClosing: function(event) { event.accepted = closingApproved; if (!closingApproved) window.backend.requestClose(); }
     Component.onCompleted: { window.backend.attach(editor, preview); window.backend.setTextScale(theme.textScale); importPage.focusPrimaryAction(); }
 
@@ -46,6 +47,14 @@ ApplicationWindow {
     }
     function changeDocument(key) { saveView(); window.backend.activate(key); documents.close(); }
     function format(command, value) { window.backend.format(command, value === undefined ? null : value); }
+    function showMessage(title, message, kind) {
+        if (messageDialog.visible && messageDialog.confirmation && kind === "info") {
+            messageQueue.push({title: title, message: message, kind: kind});
+            return;
+        }
+        messageDialog.title = title; messageText.text = message;
+        messageDialog.kind = kind; messageDialog.confirmation = kind === "confirm"; messageDialog.open();
+    }
     Connections {
         target: window.backend
         function onSnapshotRequested() { window.saveView(); }
@@ -53,11 +62,15 @@ ApplicationWindow {
         function onBatchPreparationRequested() { preparation.open(); }
         function onCloseApproved() { window.closingApproved = true; window.close(); }
         function onDialogRequested(title, message, kind) {
-            messageDialog.title = title; messageText.text = message;
-            messageDialog.confirmation = kind === "confirm"; messageDialog.open();
+            window.showMessage(title, message, kind);
         }
         function onLinkRequested(label) { linkLabel.text = label; linkDestination.text = ""; linkDialog.open(); linkDestination.forceActiveFocus(); }
-        function onSelectionRequested(anchor, position) { editor.select(anchor, position); editor.forceActiveFocus(); }
+        function onSelectionRequested(anchor, position) {
+            // Assign the cursor explicitly, including a collapsed selection.
+            editor.cursorPosition = position;
+            editor.select(anchor, position);
+            editor.forceActiveFocus();
+        }
         function onViewRestored(state) {
             let sequence = ++window.restoreSequence;
             window.pendingPreviewY = state.previewY || 0;
@@ -66,6 +79,7 @@ ApplicationWindow {
             window.follow = state.follow || false; window.tab = state.tab || 0;
             window.warningsExpanded = state.warningsExpanded || false;
             window.pdfFraction = state.pdfFraction || 0.4;
+            pdfPanel.SplitView.preferredWidth = split.width * window.pdfFraction;
             Qt.callLater(function() {
                 if (sequence !== window.restoreSequence) return;
                 editorScroll.contentY = state.editorY || 0; previewScroll.contentY = state.previewY || 0;
@@ -116,7 +130,12 @@ ApplicationWindow {
         id: importPage
         anchors.fill: parent
         visible: !window.backend.hasDocument || window.backend.worker.operation === "convert"
+        ocrMode: window.backend.worker.ocrMode
+        ocrStatus: window.backend.worker.recognitionStatus
+        conversionStage: window.backend.worker.conversionStage
+        onOcrModeRequested: function(enabled) { window.backend.worker.setOcrMode(enabled ? "auto" : "off"); }
         fontFamily: theme.fontFamily; textScale: theme.textScale
+        reducedMotion: theme.reducedMotion
         converting: window.backend.worker.operation === "convert"
         cancelling: window.backend.worker.cancellationRequested
         canImport: window.backend.worker.workerAvailable && !window.backend.worker.busy
@@ -134,58 +153,38 @@ ApplicationWindow {
         anchors.fill: parent
         spacing: 0
         visible: window.backend.hasDocument && window.backend.worker.operation !== "convert"
-        Rectangle {
+        DocumentHeader {
+            theme: theme; backend: window.backend
             Layout.fillWidth: true
-            implicitHeight: header.implicitHeight + 24
-            color: theme.background
-            RowLayout {
-                id: header
-                anchors.fill: parent; anchors.margins: 12; spacing: 10
-                Icon { tint: theme.accent; Layout.preferredWidth: 22; Layout.preferredHeight: 22 }
-                ColumnLayout {
-                    Layout.fillWidth: true; spacing: 2
-                    Text {
-                        text: window.backend.title; Accessible.name: window.backend.documentPath
-                        color: theme.text; font.pixelSize: theme.bodySize + 1; font.weight: Font.DemiBold
-                        elide: Text.ElideRight; Layout.fillWidth: true
-                        HoverHandler { id: documentHover }
-                        ToolTip.visible: documentHover.hovered
-                        ToolTip.text: window.backend.documentPath
-                    }
-                    Text { text: window.backend.modified ? "Alterações não salvas" : "Salvo no vault"; color: theme.muted; font.pixelSize: theme.captionSize }
-                }
-                ActionButton { theme: theme; text: "Abrir ▾"; enabled: !window.backend.worker.busy; onClicked: openMenu.open();
-                    Menu { id: openMenu; y: parent.height
-                        MenuItem { text: "Abrir PDF…    Ctrl+O"; onTriggered: window.backend.openPdf() }
-                        MenuItem { text: "Converter em lote…"; onTriggered: window.backend.newBatch() }
-                    }
-                }
-                ActionButton { theme: theme; text: "Documentos (" + window.backend.documentCount + ")"; onClicked: documents.open() }
-                ActionButton { theme: theme; text: window.backend.worker.operation === "export" ? "Salvando…" : "Salvar no vault…"; primary: true; enabled: window.backend.editable && window.backend.worker.workerAvailable; onClicked: window.backend.exportCurrent() }
-                ActionButton { theme: theme; text: "⋯"; Accessible.name: "Opções de exportação"; onClicked: options.open() }
-            }
+            onDocumentsRequested: documents.open()
+            onOptionsRequested: options.open()
         }
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
         Flow {
-            Layout.fillWidth: true; Layout.margins: 10; spacing: 8
-            ActionButton { theme: theme; text: window.pdfVisible ? "Ocultar PDF" : "Mostrar PDF"; onClicked: { window.pdfVisible = !window.pdfVisible; window.saveView(); } }
+            Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; Layout.topMargin: 6; Layout.bottomMargin: 6; spacing: 8
+            ToolButton { theme: theme; text: window.pdfVisible ? "Ocultar PDF" : "Mostrar PDF"; onClicked: { window.pdfVisible = !window.pdfVisible; window.saveView(); } }
             Toggle { theme: theme; text: "Acompanhar página"; checked: window.follow; onToggled: { window.follow = checked; if (checked) window.backend.follow_page(); window.saveView(); } }
-            ActionButton { theme: theme; text: "Imagens filtradas (" + window.backend.filteredCount + ")"; visible: window.backend.filteredCount > 0; enabled: window.backend.editable; onClicked: { window.backend.openFiltered(); filteredDialog.open(); } }
-            ActionButton { theme: theme; text: "Avisos (" + window.backend.warnings.length + ") " + (window.warningsExpanded ? "⌃" : "⌄"); visible: window.backend.warnings.length > 0; onClicked: { window.warningsExpanded = !window.warningsExpanded; window.saveView(); } }
+            ToolButton { theme: theme; iconName: "image"; text: "Imagens filtradas (" + window.backend.filteredCount + ")"; visible: window.backend.filteredCount > 0; enabled: window.backend.editable; onClicked: { window.backend.openFiltered(); filteredDialog.open(); } }
+            ToolButton { theme: theme; iconName: "warning"; text: "Avisos (" + window.backend.warnings.length + ")"; selected: window.warningsExpanded; visible: window.backend.warnings.length > 0; onClicked: { window.warningsExpanded = !window.warningsExpanded; window.saveView(); } }
         }
         Rectangle {
             visible: window.warningsExpanded && window.backend.warnings.length > 0
             Layout.fillWidth: true; Layout.preferredHeight: Math.min(110, warningsList.contentHeight + 12)
-            color: theme.surface
+            color: theme.warningSurface
             ListView {
-                id: warningsList; anchors.fill: parent; anchors.margins: 6; clip: true; model: window.backend.warnings
-                ScrollBar.vertical: ScrollBar {}
+                id: warningsList; objectName: "warningsList"; anchors.fill: parent; anchors.margins: 6; clip: true; model: window.backend.warnings
+                ScrollBar.vertical: SurfaceScrollBar { theme: theme }
                 delegate: ItemDelegate {
                     id: warningRow
                     required property var modelData
+                    objectName: "warning-" + modelData.page
+                    enabled: modelData.page > 0
                     width: ListView.view.width; height: Math.max(34, warningText.implicitHeight + 12)
-                    contentItem: Text { id: warningText; text: "Página " + warningRow.modelData.page + " · " + warningRow.modelData.message; color: theme.muted; wrapMode: Text.Wrap; font.pixelSize: theme.captionSize }
-                    onClicked: { window.pdfVisible = true; window.backend.goPage(modelData.page); }
+                    contentItem: Text { textFormat: Text.PlainText; id: warningText; text: (warningRow.modelData.page > 0 ? "Página " + warningRow.modelData.page : "Geral") + " · " + warningRow.modelData.message; color: theme.warning; wrapMode: Text.Wrap; font.pixelSize: theme.captionSize }
+                    background: Rectangle { color: warningRow.hovered ? theme.raised : "transparent"; border.color: warningRow.visualFocus ? theme.accent : "transparent"; radius: 6 }
+                    Accessible.name: warningText.text
+                    Accessible.role: modelData.page > 0 ? Accessible.Button : Accessible.StaticText
+                    onClicked: if (modelData.page > 0) { window.pdfVisible = true; window.backend.goPage(modelData.page); }
                 }
             }
         }
@@ -193,35 +192,33 @@ ApplicationWindow {
             id: split
             Layout.fillWidth: true; Layout.fillHeight: true
             orientation: Qt.Horizontal
+            onWidthChanged: pdfPanel.SplitView.preferredWidth = width * window.pdfFraction
             handle: Rectangle {
-                implicitWidth: 6; color: SplitHandle.hovered || SplitHandle.pressed ? theme.border : theme.background
+                objectName: "comparisonDivider"
+                implicitWidth: 6
+                activeFocusOnTab: window.pdfVisible
+                color: activeFocus ? theme.accent : SplitHandle.hovered || SplitHandle.pressed ? theme.border : theme.background
+                Accessible.role: Accessible.Splitter
                 Accessible.name: "Ajustar divisão entre PDF e editor"
+                Accessible.description: "Use as setas esquerda e direita para ajustar os painéis."
+                Keys.onLeftPressed: { pdfPanel.SplitView.preferredWidth = Math.max(275, pdfPanel.width - split.width * 0.05); Qt.callLater(window.saveView); }
+                Keys.onRightPressed: { pdfPanel.SplitView.preferredWidth = Math.min(split.width - 366, pdfPanel.width + split.width * 0.05); Qt.callLater(window.saveView); }
             }
             Rectangle {
                 id: pdfPanel
+                objectName: "pdfPanel"
                 visible: window.pdfVisible
                 SplitView.preferredWidth: split.width * window.pdfFraction
                 SplitView.minimumWidth: 275
-                color: theme.surface
+                color: theme.canvas
                 onWidthChanged: { if (!window.restoring && window.pdfVisible && split.width > 0) window.pdfFraction = width / split.width; }
                 ColumnLayout {
                     anchors.fill: parent; spacing: 0
-                    Flow {
-                        Layout.fillWidth: true; Layout.margins: 8; spacing: 6
-                        ActionButton { theme: theme; text: "‹"; Accessible.name: "Página anterior"; enabled: window.backend.editable && window.backend.page > 1; onClicked: window.backend.goPage(window.backend.page - 1) }
-                        NumericField { id: pageField; objectName: "pageField"; theme: theme; width: 48; value: window.backend.page; minimum: 1; maximum: window.backend.pageCount; enabled: window.backend.editable; Accessible.name: "Página do PDF"; onCommitted: function(number) { window.backend.goPage(number); } }
-                        Text { text: "/ " + window.backend.pageCount; color: theme.muted; font.pixelSize: theme.captionSize; height: pageField.height; verticalAlignment: Text.AlignVCenter }
-                        ActionButton { theme: theme; text: "›"; Accessible.name: "Próxima página"; enabled: window.backend.editable && window.backend.page < window.backend.pageCount; onClicked: window.backend.goPage(window.backend.page + 1) }
-                        ActionButton { theme: theme; text: "−"; Accessible.name: "Reduzir zoom"; enabled: window.backend.editable; onClicked: window.backend.setZoom(window.backend.zoom - 25) }
-                        NumericField { objectName: "zoomField"; theme: theme; width: 58; value: window.backend.zoom; minimum: 25; maximum: 300; enabled: window.backend.editable; Accessible.name: "Zoom percentual"; onCommitted: function(number) { window.backend.setZoom(number); } }
-                        ActionButton { theme: theme; text: "+"; Accessible.name: "Ampliar zoom"; enabled: window.backend.editable; onClicked: window.backend.setZoom(window.backend.zoom + 25) }
-                        ActionButton { theme: theme; text: "Ajustar ▾"; onClicked: fitMenu.open()
-                            Menu { id: fitMenu; y: parent.height
-                                MenuItem { text: "À largura"; onTriggered: window.backend.fit("width") }
-                                MenuItem { text: "À página"; onTriggered: window.backend.fit("page") }
-                            }
-                        }
-                        Toggle { theme: theme; text: "Recortar"; checked: window.cropMode; enabled: window.backend.editable && !window.backend.rendering; onToggled: window.cropMode = checked }
+                    PdfToolbar {
+                        theme: theme; backend: window.backend
+                        Layout.fillWidth: true; Layout.margins: 10
+                        cropMode: window.cropMode
+                        onCropToggled: function(checked) { window.cropMode = checked; }
                     }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
                     Flickable {
@@ -236,8 +233,8 @@ ApplicationWindow {
                         property bool restorePending: true
                         onWidthChanged: window.backend.viewport(width, height)
                         onHeightChanged: window.backend.viewport(width, height)
-                        ScrollBar.vertical: ScrollBar {}
-                        ScrollBar.horizontal: ScrollBar {}
+                        ScrollBar.vertical: SurfaceScrollBar { theme: theme }
+                        ScrollBar.horizontal: SurfaceScrollBar { theme: theme }
                         Image {
                             id: pdfImage
                             objectName: "pdfImage"
@@ -269,7 +266,7 @@ ApplicationWindow {
                                     visible: cropArea.pressed
                                     x: Math.min(cropArea.startX, cropArea.endX); y: Math.min(cropArea.startY, cropArea.endY)
                                     width: Math.abs(cropArea.endX - cropArea.startX); height: Math.abs(cropArea.endY - cropArea.startY)
-                                    color: "#33ff7869"; border.color: theme.accent
+                                    color: theme.imageSelection; border.color: theme.accent
                                 }
                             }
                         }
@@ -282,7 +279,7 @@ ApplicationWindow {
                         }
                         TapHandler { onTapped: pdfScroll.forceActiveFocus() }
                     }
-                    Text { Layout.fillWidth: true; Layout.margins: 8; text: window.backend.rendering ? "Renderizando página…" : window.cropMode ? "Arraste sobre o PDF para inserir um recorte." : "PDF original · somente leitura"; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.Wrap }
+                    Text { textFormat: Text.PlainText; Layout.fillWidth: true; Layout.margins: 8; text: window.backend.rendering ? "Renderizando página…" : window.cropMode ? "Arraste sobre o PDF para inserir um recorte." : "PDF original · somente leitura"; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.Wrap }
                 }
             }
             Rectangle {
@@ -291,46 +288,46 @@ ApplicationWindow {
                 ColumnLayout {
                     anchors.fill: parent; spacing: 0
                     RowLayout {
-                        Layout.fillWidth: true; Layout.margins: 8; spacing: 6
-                        ActionButton { theme: theme; text: "Markdown"; compact: true; selected: window.tab === 0; onClicked: { window.tab = 0; editor.forceActiveFocus(); window.saveView(); } }
-                        ActionButton { theme: theme; text: "Prévia"; compact: true; selected: window.tab === 1; onClicked: { window.tab = 1; preview.forceActiveFocus(); window.saveView(); } }
+                        Layout.fillWidth: true; Layout.margins: 10; spacing: 6
+                        ActionButton { id: markdownTab; objectName: "markdownTab"; theme: theme; text: "Markdown"; compact: true; Accessible.role: Accessible.PageTab; Accessible.selected: selected; Keys.onRightPressed: { window.tab = 1; previewTab.forceActiveFocus(); window.saveView(); } selected: window.tab === 0; onClicked: { window.tab = 0; editor.forceActiveFocus(); window.saveView(); } }
+                        ActionButton { id: previewTab; objectName: "previewTab"; theme: theme; text: "Prévia"; compact: true; Accessible.role: Accessible.PageTab; Accessible.selected: selected; Keys.onLeftPressed: { window.tab = 0; markdownTab.forceActiveFocus(); window.saveView(); } selected: window.tab === 1; onClicked: { window.tab = 1; preview.forceActiveFocus(); window.saveView(); } }
                         Item { Layout.fillWidth: true }
+                        ToolGroup { theme: theme
                         ToolButton { theme: theme; objectName: "undoAction"; iconName: "undo"; description: "Desfazer"; shortcutHint: "Ctrl+Z"; Accessible.name: "Desfazer"; enabled: window.backend.canUndo; onClicked: window.backend.undo() }
                         ToolButton { theme: theme; objectName: "redoAction"; iconName: "redo"; description: "Refazer"; shortcutHint: "Ctrl+Shift+Z"; Accessible.name: "Refazer"; enabled: window.backend.canRedo; onClicked: window.backend.redo() }
+                        }
                     }
                     Flow {
                         visible: window.tab === 0
                         objectName: "editorToolbar"
-                        Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8; spacing: 4
+                        Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 12; spacing: 8
                         enabled: window.backend.editable
-                        Row {
-                            spacing: 2
+                        ToolGroup {
+                            theme: theme
                             ToolButton { theme: theme; objectName: "styleAction"; text: "Estilo"; description: "Estilo do parágrafo"; menuIndicator: true; onClicked: styleMenu.open()
-                                Menu { id: styleMenu; objectName: "styleMenu"; y: parent.height
-                                    MenuItem { text: "Parágrafo"; onTriggered: window.format("heading", 0) }
-                                    Repeater { model: 6; MenuItem { required property int index; text: "Título " + (index + 1); onTriggered: window.format("heading", index + 1) } }
+                                SurfaceMenu { theme: theme; id: styleMenu; objectName: "styleMenu"; y: parent.height
+                                    SurfaceMenuItem { theme: theme; text: "Parágrafo"; onTriggered: window.format("heading", 0) }
+                                    Repeater { model: 6; SurfaceMenuItem { theme: theme; required property int index; text: "Título " + (index + 1); onTriggered: window.format("heading", index + 1) } }
                                 }
                             }
                         }
-                        Row {
-                            objectName: "textTools"; spacing: 2
-                            Rectangle { width: 1; height: 20; anchors.verticalCenter: parent.verticalCenter; color: theme.border; opacity: parent.x > 0 ? 1 : 0 }
+                        ToolGroup {
+                            theme: theme; objectName: "textTools"
                             ToolButton { theme: theme; objectName: "boldAction"; iconName: "bold"; description: "Negrito"; shortcutHint: "Ctrl+B"; onClicked: window.format("bold") }
                             ToolButton { theme: theme; objectName: "italicAction"; iconName: "italic"; description: "Itálico"; shortcutHint: "Ctrl+I"; onClicked: window.format("italic") }
                             ToolButton { theme: theme; objectName: "linkAction"; iconName: "link"; description: "Inserir link"; shortcutHint: "Ctrl+K"; onClicked: window.format("link") }
                         }
-                        Row {
-                            objectName: "paragraphTools"; spacing: 2
-                            Rectangle { width: 1; height: 20; anchors.verticalCenter: parent.verticalCenter; color: theme.border; opacity: parent.x > 0 ? 1 : 0 }
+                        ToolGroup {
+                            theme: theme; objectName: "paragraphTools"
                             ToolButton { theme: theme; objectName: "bulletAction"; iconName: "bullet"; description: "Lista com marcadores"; shortcutHint: ""; onClicked: window.format("bullet") }
                             ToolButton { theme: theme; objectName: "orderedAction"; iconName: "ordered"; description: "Lista numerada"; shortcutHint: ""; onClicked: window.format("ordered") }
                             ToolButton { theme: theme; objectName: "quoteAction"; iconName: "quote"; description: "Citação"; shortcutHint: ""; onClicked: window.format("quote") }
                             ToolButton { theme: theme; objectName: "alignAction"; iconName: "align"; description: "Alinhamento do parágrafo"; menuIndicator: true; onClicked: alignMenu.open()
-                                Menu { id: alignMenu; objectName: "alignMenu"; y: parent.height
-                                    MenuItem { text: "Esquerda"; onTriggered: window.format("align", "left") }
-                                    MenuItem { text: "Centro"; onTriggered: window.format("align", "center") }
-                                    MenuItem { text: "Direita"; onTriggered: window.format("align", "right") }
-                                    MenuItem { text: "Justificado"; onTriggered: window.format("align", "justify") }
+                                SurfaceMenu { theme: theme; id: alignMenu; objectName: "alignMenu"; y: parent.height
+                                    SurfaceMenuItem { theme: theme; text: "Esquerda"; onTriggered: window.format("align", "left") }
+                                    SurfaceMenuItem { theme: theme; text: "Centro"; onTriggered: window.format("align", "center") }
+                                    SurfaceMenuItem { theme: theme; text: "Direita"; onTriggered: window.format("align", "right") }
+                                    SurfaceMenuItem { theme: theme; text: "Justificado"; onTriggered: window.format("align", "justify") }
                                 }
                             }
                         }
@@ -338,10 +335,17 @@ ApplicationWindow {
                     Flow {
                         visible: window.tab === 1
                         Layout.fillWidth: true; Layout.margins: 8; spacing: 8
-                        Toggle { theme: theme; text: "Selecionar imagens"; checked: window.backend.selectionMode; enabled: window.backend.previewReady; onToggled: window.backend.setSelectionMode(checked) }
-                        Text { visible: window.backend.selectionMode; text: window.backend.selectedImages + " selecionadas"; color: theme.muted; font.pixelSize: theme.captionSize; height: 32; verticalAlignment: Text.AlignVCenter }
-                        ActionButton { theme: theme; visible: window.backend.selectionMode; text: "Remover selecionadas"; enabled: window.backend.previewReady && window.backend.selectedImages > 0; onClicked: window.backend.removeImages() }
-                        ActionButton { theme: theme; visible: window.backend.selectionMode; text: "Limpar"; enabled: window.backend.selectedImages > 0; onClicked: window.backend.clearImages() }
+                        Toggle { objectName: "selectImagesAction"; theme: theme; text: "Selecionar imagens"; checked: window.backend.selectionMode; enabled: window.backend.previewReady; onToggled: window.backend.setSelectionMode(checked) }
+                        Text { textFormat: Text.PlainText; visible: window.backend.selectionMode; text: window.backend.selectedImages + " selecionadas"; color: theme.muted; font.pixelSize: theme.captionSize; height: 32; verticalAlignment: Text.AlignVCenter }
+                        ActionButton { theme: theme; objectName: "removeImagesAction"; visible: window.backend.selectionMode; text: "Remover selecionadas"; destructive: true; description: "Remover as imagens selecionadas; use Desfazer para restaurar"; enabled: window.backend.previewReady && window.backend.selectedImages > 0; onClicked: window.backend.removeImages() }
+                        ActionButton { theme: theme; visible: window.backend.selectionMode; text: "Limpar seleção"; compact: true; enabled: window.backend.selectedImages > 0; onClicked: window.backend.clearImages() }
+                    }
+                    Text {
+                        textFormat: Text.PlainText
+                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; Layout.bottomMargin: 8
+                        visible: window.tab === 1 && window.backend.selectionMode
+                        text: "Clique nas imagens para selecionar. A remoção pode ser desfeita."
+                        color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.WordWrap
                     }
                     Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
                     Item {
@@ -351,28 +355,29 @@ ApplicationWindow {
                             anchors.fill: parent; visible: window.tab === 0; clip: true
                             contentWidth: width; contentHeight: Math.max(height, editor.height + height - 60)
                             boundsBehavior: Flickable.StopAtBounds
-                            ScrollBar.vertical: ScrollBar {}
+                            ScrollBar.vertical: SurfaceScrollBar { theme: theme }
                             TextEdit {
                                 id: editor; objectName: "markdownEditor"
-                                x: 18; y: 14; width: parent.width - 36
+                                x: (parent.width - width) / 2; y: 28
+                                width: Math.max(1, Math.min(theme.readingWidth, parent.width - theme.readingInset * 2))
                                 height: Math.max(contentHeight, editorScroll.height - 28)
                                 textFormat: TextEdit.PlainText
                                 wrapMode: TextEdit.Wrap
-                                color: theme.text; selectionColor: theme.accent; selectedTextColor: theme.accentText
-                                font.pixelSize: theme.bodySize; font.family: window.backend.editorFontFamily
+                                color: theme.text; selectionColor: theme.selection; selectedTextColor: theme.text
+                                font.pixelSize: theme.editorSize; font.family: window.backend.editorFontFamily
                                 selectByMouse: true; persistentSelection: true
                                 readOnly: !window.backend.editable
                                 Accessible.name: "Editor Markdown"
                                 TapHandler { acceptedButtons: Qt.RightButton; onTapped: editorMenu.popup() }
-                                Menu {
-                                    id: editorMenu
-                                    MenuItem { text: "Desfazer"; enabled: window.backend.canUndo; onTriggered: window.backend.undo() }
-                                    MenuItem { text: "Refazer"; enabled: window.backend.canRedo; onTriggered: window.backend.redo() }
-                                    MenuSeparator {}
-                                    MenuItem { text: "Recortar"; enabled: window.backend.editable && editor.selectionStart !== editor.selectionEnd; onTriggered: editor.cut() }
-                                    MenuItem { text: "Copiar"; enabled: editor.selectionStart !== editor.selectionEnd; onTriggered: editor.copy() }
-                                    MenuItem { text: "Colar"; enabled: window.backend.editable && editor.canPaste; onTriggered: editor.paste() }
-                                    MenuItem { text: "Selecionar tudo"; onTriggered: editor.selectAll() }
+                                SurfaceMenu { theme: theme;
+                                    id: editorMenu; objectName: "editorMenu"
+                                    SurfaceMenuItem { theme: theme; text: "Desfazer"; enabled: window.backend.canUndo; onTriggered: window.backend.undo() }
+                                    SurfaceMenuItem { theme: theme; text: "Refazer"; enabled: window.backend.canRedo; onTriggered: window.backend.redo() }
+                                    SurfaceMenuSeparator { theme: theme }
+                                    SurfaceMenuItem { theme: theme; text: "Recortar"; enabled: window.backend.editable && editor.selectionStart !== editor.selectionEnd; onTriggered: editor.cut() }
+                                    SurfaceMenuItem { theme: theme; text: "Copiar"; enabled: editor.selectionStart !== editor.selectionEnd; onTriggered: editor.copy() }
+                                    SurfaceMenuItem { theme: theme; text: "Colar"; enabled: window.backend.editable && editor.canPaste; onTriggered: editor.paste() }
+                                    SurfaceMenuItem { theme: theme; text: "Selecionar tudo"; onTriggered: editor.selectAll() }
                                 }
                                 onCursorRectangleChanged: if (activeFocus && !window.restoring) {
                                     if (cursorRectangle.y + 30 > editorScroll.contentY + editorScroll.height) editorScroll.contentY = cursorRectangle.y + 30 - editorScroll.height;
@@ -380,36 +385,37 @@ ApplicationWindow {
                                 }
                             }
                         }
-                        Text {
+                        Column {
                             anchors.centerIn: parent
-                            z: 1
+                            z: 1; spacing: 12
+                            width: Math.min(220, parent.width - 48)
                             visible: window.tab === 1 && window.backend.previewPending
-                            text: "Preparando prévia…"
-                            color: theme.muted
-                            font.pixelSize: theme.captionSize
+                            OperationProgress { theme: theme; width: parent.width; indeterminate: true; Accessible.name: "Preparando prévia" }
+                            Text { textFormat: Text.PlainText; width: parent.width; horizontalAlignment: Text.AlignHCenter; text: "Preparando prévia…"; color: theme.muted; font.pixelSize: theme.captionSize }
                         }
                         Flickable {
                             id: previewScroll
                             anchors.fill: parent; visible: window.tab === 1 && !window.backend.previewPending; clip: true
                             contentWidth: width; contentHeight: Math.max(height, preview.height + height - 60)
                             boundsBehavior: Flickable.StopAtBounds
-                            ScrollBar.vertical: ScrollBar {}
+                            ScrollBar.vertical: SurfaceScrollBar { theme: theme }
                             TextEdit {
                                 id: preview; objectName: "markdownPreview"
-                                x: 18; y: 14; width: parent.width - 36
+                                x: (parent.width - width) / 2; y: 28
+                                width: Math.max(1, Math.min(theme.readingWidth, parent.width - theme.readingInset * 2))
                                 height: contentHeight
                                 onWidthChanged: window.backend.previewResized()
                                 textFormat: TextEdit.RichText
                                 wrapMode: TextEdit.Wrap
                                 readOnly: true; selectByMouse: true; persistentSelection: true
-                                color: theme.text; selectionColor: theme.accent; selectedTextColor: theme.accentText
-                                font.pixelSize: theme.bodySize
+                                color: theme.text; selectionColor: theme.selection; selectedTextColor: theme.text
+                                font.pixelSize: theme.editorSize
                                 Accessible.name: "Prévia do Markdown"
                                 TapHandler { acceptedButtons: Qt.RightButton; onTapped: previewMenu.popup() }
-                                Menu {
-                                    id: previewMenu
-                                    MenuItem { text: "Copiar"; enabled: preview.selectionStart !== preview.selectionEnd; onTriggered: preview.copy() }
-                                    MenuItem { text: "Selecionar tudo"; onTriggered: preview.selectAll() }
+                                SurfaceMenu { theme: theme;
+                                    id: previewMenu; objectName: "previewMenu"
+                                    SurfaceMenuItem { theme: theme; text: "Copiar"; enabled: preview.selectionStart !== preview.selectionEnd; onTriggered: preview.copy() }
+                                    SurfaceMenuItem { theme: theme; text: "Selecionar tudo"; onTriggered: preview.selectAll() }
                                 }
                                 Repeater {
                                     model: window.backend.imageModel
@@ -418,15 +424,16 @@ ApplicationWindow {
                                         required property int position
                                         required property bool selected
                                         objectName: "previewImage-" + position
-                                        property rect targetRect: { let layoutWidth = preview.width; let layoutHeight = preview.contentHeight; return preview.positionToRectangle(position); }
-                                        property rect endRect: { let layoutWidth = preview.width; let layoutHeight = preview.contentHeight; return preview.positionToRectangle(position + 1); }
+                                        readonly property bool validPosition: position >= 0 && position + 1 <= preview.length
+                                        property rect targetRect: { let layoutWidth = preview.width; let layoutHeight = preview.contentHeight; return validPosition ? preview.positionToRectangle(position) : Qt.rect(0, 0, 0, 0); }
+                                        property rect endRect: { let layoutWidth = preview.width; let layoutHeight = preview.contentHeight; return validPosition ? preview.positionToRectangle(position + 1) : Qt.rect(0, 0, 0, 0); }
                                         x: targetRect.x; y: targetRect.y
                                         width: Math.max(16, endRect.x - targetRect.x)
                                         height: targetRect.height
-                                        visible: window.backend.selectionMode && window.backend.previewReady
-                                        color: imageOverlay.selected ? "#22ff7869" : "transparent"
-                                        border.width: imageOverlay.selected ? 2 : 0
-                                        border.color: theme.accent
+                                        visible: validPosition && window.backend.selectionMode && window.backend.previewReady
+                                        color: imageOverlay.selected ? theme.imageSelection : "transparent"
+                                        border.width: imageOverlay.selected || imageOverlay.activeFocus ? 2 : 0
+                                        border.color: imageOverlay.activeFocus ? theme.text : theme.accent
                                         Accessible.role: Accessible.CheckBox
                                         Accessible.name: "Imagem na prévia"
                                         Accessible.checkable: true; Accessible.checked: imageOverlay.selected
@@ -444,50 +451,66 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true; implicitHeight: statusText.implicitHeight + 16
             color: theme.surface
-            Text { id: statusText; anchors.fill: parent; anchors.margins: 8; text: window.backend.message || "Processamento local e offline"; color: theme.muted; font.pixelSize: theme.captionSize; elide: Text.ElideRight }
+            Text { textFormat: Text.PlainText; id: statusText; anchors.fill: parent; anchors.margins: 8; text: window.backend.message || "Local e offline · PDFs originais preservados"; color: theme.muted; font.pixelSize: theme.captionSize; elide: Text.ElideRight
+                HoverHandler { id: statusHover }
+                Hint { theme: theme; visible: statusHover.hovered && statusText.truncated; text: statusText.text }
+                Accessible.name: text
+            }
         }
     }
 
     SurfaceDialog {
         id: preparation; objectName: "preparation"; theme: theme; title: "Preparar conversão em lote"
+        footer: DialogActions {
+            theme: theme
+            ActionButton { theme: theme; text: "Converter " + window.backend.pendingCount + " documento(s)"; primary: true; enabled: window.backend.pendingCount > 0; onClicked: { preparation.close(); window.backend.beginBatch(); } }
+            ActionButton { theme: theme; text: "Cancelar"; onClicked: preparation.close() }
+            ActionButton { theme: theme; text: "Adicionar PDFs…"; onClicked: window.backend.addPending() }
+        }
         width: Math.min(window.width - 48, 700); height: Math.min(window.height - 48, 500)
         ColumnLayout {
             anchors.fill: parent; spacing: 12
-            Text { text: window.backend.pendingCount + " documento(s). Remova os arquivos que não deseja converter."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Toggle { objectName: "batchOcrModeAction"; theme: theme; text: "OCR automático · texto, tabelas e fórmulas"; checked: window.backend.worker.ocrMode === "auto"; enabled: !window.backend.worker.busy; onToggled: window.backend.worker.setOcrMode(checked ? "auto" : "off"); Layout.fillWidth: true }
+            Text { textFormat: Text.PlainText; text: window.backend.worker.recognitionStatus; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            Text { textFormat: Text.PlainText; text: window.backend.pendingCount + " documento(s). Remova os arquivos que não deseja converter."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.Wrap; Layout.fillWidth: true }
             ListView {
+                id: pendingList
                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true; model: window.backend.pendingModel; spacing: 8
-                ScrollBar.vertical: ScrollBar {}
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: "Adicione PDFs para preparar a conversão."; visible: pendingList.count === 0; color: theme.muted; font.pixelSize: theme.bodySize }
+                ScrollBar.vertical: SurfaceScrollBar { theme: theme }
                 delegate: RowLayout {
                     id: pendingRow
                     required property string key
                     required property string name
                     width: ListView.view.width
-                    Text { text: pendingRow.name; color: theme.text; font.pixelSize: theme.bodySize; elide: Text.ElideMiddle; Layout.fillWidth: true }
-                    ActionButton { theme: theme; text: "Remover"; onClicked: window.backend.removePending(pendingRow.key) }
+                    Text { textFormat: Text.PlainText; text: pendingRow.name; color: theme.text; font.pixelSize: theme.bodySize; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                    ActionButton { theme: theme; text: "Remover"; compact: true; destructive: true; onClicked: window.backend.removePending(pendingRow.key) }
                 }
-            }
-            RowLayout {
-                ActionButton { theme: theme; text: "Adicionar PDFs…"; onClicked: window.backend.addPending() }
-                Item { Layout.fillWidth: true }
-                ActionButton { theme: theme; text: "Cancelar"; onClicked: preparation.close() }
-                ActionButton { theme: theme; text: "Converter " + window.backend.pendingCount + " documento(s)"; primary: true; enabled: window.backend.pendingCount > 0; onClicked: { preparation.close(); window.backend.beginBatch(); } }
             }
         }
     }
     SurfaceDialog {
         id: documents; objectName: "documents"; theme: theme; title: "Documentos da sessão"
+        footer: DialogActions {
+            theme: theme
+            Keys.onEscapePressed: if (window.backend.batchRunning) window.backend.cancelBatch()
+            ActionButton { theme: theme; text: "Exportar selecionados (" + window.backend.selectedDocuments + ")…"; primary: true; enabled: !window.backend.worker.busy && window.backend.selectedDocuments > 0; onClicked: window.backend.exportBatch() }
+            ActionButton { objectName: "batchCancelAction"; theme: theme; text: window.backend.batchRunning ? (window.backend.batchCancelling ? "Cancelando…" : "Cancelar operação") : "Fechar"; enabled: !window.backend.batchCancelling; onClicked: { if (window.backend.batchRunning) window.backend.cancelBatch(); else documents.close(); } }
+            ActionButton { theme: theme; text: "Novo lote…"; enabled: !window.backend.worker.busy; onClicked: window.backend.newBatch() }
+        }
         width: Math.min(window.width - 48, 850); height: Math.min(window.height - 48, 610)
         closePolicy: window.backend.batchRunning ? Popup.NoAutoClose : Popup.CloseOnEscape
         ColumnLayout {
             Keys.onEscapePressed: if (window.backend.batchRunning) window.backend.cancelBatch()
             anchors.fill: parent; spacing: 12
-            Text { text: window.backend.batchMessage || "Revise cada documento antes de publicar no vault."; color: theme.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: theme.bodySize }
-            ProgressBar { visible: window.backend.batchRunning; Layout.fillWidth: true; from: 0; to: Math.max(1, window.backend.batchTotal); value: window.backend.batchCurrent; indeterminate: window.backend.batchTotal === 0 }
+            Text { textFormat: Text.PlainText; text: window.backend.batchMessage || "Revise cada documento antes de publicar no vault."; color: theme.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: theme.bodySize }
+            OperationProgress { theme: theme; visible: window.backend.batchRunning; Layout.fillWidth: true; from: 0; to: Math.max(1, window.backend.batchTotal); value: window.backend.batchCurrent; indeterminate: window.backend.batchTotal === 0 }
             ListView {
                 id: documentList; objectName: "documentList"
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: "Os documentos convertidos aparecerão aqui."; visible: documentList.count === 0; color: theme.muted; font.pixelSize: theme.bodySize }
                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                 model: window.backend.documentModel; spacing: 6
-                ScrollBar.vertical: ScrollBar {}
+                ScrollBar.vertical: SurfaceScrollBar { theme: theme }
                 delegate: Rectangle {
                     id: row
                     required property string key
@@ -498,37 +521,44 @@ ApplicationWindow {
                     required property bool ready
                     required property bool external
                     width: ListView.view.width; height: Math.max(72, rowText.implicitHeight + 20)
-                    radius: 8; color: theme.raised; border.color: theme.border
+                    radius: 0; color: rowHover.hovered ? theme.surface : "transparent"
+                    HoverHandler { id: rowHover }
+                    Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: theme.border }
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 10; spacing: 10
                         Toggle { theme: theme; text: ""; Accessible.name: "Incluir " + row.name + " na exportação"; checked: row.included; visible: !row.external; enabled: !window.backend.worker.busy && row.ready; onToggled: window.backend.include(row.key, checked) }
                         ColumnLayout {
                             id: rowText; Layout.fillWidth: true; spacing: 3
-                            Text { text: row.name; color: theme.text; font.pixelSize: theme.bodySize; elide: Text.ElideMiddle; Layout.fillWidth: true }
-                            Text { text: row.status; color: theme.muted; font.pixelSize: theme.captionSize }
-                            Text { visible: row.detail.length > 0; text: row.detail; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                            Text { textFormat: Text.PlainText; text: row.name; color: theme.text; font.pixelSize: theme.bodySize; elide: Text.ElideMiddle; Layout.fillWidth: true }
+                            StatusLabel {
+                                theme: theme; text: row.status
+                                tone: row.status === "Falhou" ? "danger" : row.status === "Salvo" || row.status === "Já salvo" ? "success" : row.status === "Cancelado" || row.status === "Não executado" || row.status === "Não exportado" ? "warning" : "neutral"
+                            }
+                            Text { textFormat: Text.PlainText; visible: row.ready && !row.included && !row.external; text: "Fora da exportação"; color: theme.warning; font.pixelSize: theme.captionSize; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                            Text { textFormat: Text.PlainText; visible: row.detail.length > 0; text: row.detail; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.Wrap; Layout.fillWidth: true }
                         }
                         ActionButton { theme: theme; text: "Revisar"; enabled: row.ready && !window.backend.worker.busy; onClicked: window.changeDocument(row.key) }
                     }
                 }
             }
-            Flow {
-                Layout.fillWidth: true; spacing: 8
-                ActionButton { theme: theme; text: "Novo lote…"; enabled: !window.backend.worker.busy; onClicked: window.backend.newBatch() }
-                ActionButton { theme: theme; text: "Exportar selecionados (" + window.backend.selectedDocuments + ")…"; primary: true; enabled: !window.backend.worker.busy && window.backend.selectedDocuments > 0; onClicked: window.backend.exportBatch() }
-                ActionButton { theme: theme; text: window.backend.batchRunning ? (window.backend.batchCancelling ? "Cancelando…" : "Cancelar operação") : "Fechar"; enabled: !window.backend.batchCancelling; onClicked: { if (window.backend.batchRunning) window.backend.cancelBatch(); else documents.close(); } }
-            }
+
         }
     }
     SurfaceDialog {
         id: filteredDialog; objectName: "filteredDialog"; onClosed: window.backend.closeFiltered(); theme: theme; title: "Imagens filtradas nas margens"
+        footer: DialogActions {
+            theme: theme
+            ActionButton { theme: theme; text: "Fechar"; onClicked: filteredDialog.close() }
+        }
         width: Math.min(window.width - 48, 750); height: Math.min(window.height - 48, 560)
         ColumnLayout {
             anchors.fill: parent; spacing: 12
-            Text { text: "Elementos recorrentes omitidos. Restaurar insere a figura ao final do trecho da página."; color: theme.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: theme.bodySize }
+            Text { textFormat: Text.PlainText; text: "Elementos recorrentes omitidos. Restaurar insere a figura ao final do trecho da página."; color: theme.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: theme.bodySize }
             ListView {
+                id: filteredList
                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true
-                model: window.backend.filteredModel; spacing: 8; ScrollBar.vertical: ScrollBar {}
+                model: window.backend.filteredModel; spacing: 8; ScrollBar.vertical: SurfaceScrollBar { theme: theme }
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: "Nenhuma imagem filtrada neste documento."; visible: filteredList.count === 0; color: theme.muted; font.pixelSize: theme.bodySize }
                 delegate: Rectangle {
                     id: filteredRow
                     required property string key
@@ -545,56 +575,110 @@ ApplicationWindow {
                         Image { source: filteredRow.thumbnail; Layout.preferredWidth: 100; Layout.preferredHeight: 70; fillMode: Image.PreserveAspectFit; sourceSize.width: 200; sourceSize.height: 140 }
                         ColumnLayout {
                             id: filteredText; Layout.fillWidth: true
-                            Text { text: "Página " + filteredRow.page; color: theme.text; font.pixelSize: theme.bodySize }
-                            Text { text: filteredRow.reason; color: theme.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: theme.captionSize }
-                            Text { visible: filteredRow.issue.length > 0; text: filteredRow.issue; color: theme.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: theme.captionSize }
-                            RowLayout {
+                            Text { textFormat: Text.PlainText; text: "Página " + filteredRow.page; color: theme.text; font.pixelSize: theme.bodySize }
+                            Text { textFormat: Text.PlainText; text: filteredRow.reason; color: theme.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: theme.captionSize }
+                            Text { textFormat: Text.PlainText; visible: filteredRow.issue.length > 0; text: filteredRow.issue; color: theme.muted; wrapMode: Text.Wrap; Layout.fillWidth: true; font.pixelSize: theme.captionSize }
+                            Flow {
+                                Layout.fillWidth: true; spacing: 8
                                 ActionButton { theme: theme; text: "Ver no PDF"; enabled: window.backend.editable; onClicked: { window.pdfVisible = true; window.backend.goPage(filteredRow.page); filteredDialog.close(); } }
-                                ActionButton { theme: theme; text: "Restaurar"; enabled: window.backend.editable && filteredRow.restorable; onClicked: window.backend.restoreImage(Number(filteredRow.key)) }
+                                ActionButton { theme: theme; text: "Restaurar"; description: "Restaurar imagem no Markdown; a ação pode ser desfeita"; enabled: window.backend.editable && filteredRow.restorable; onClicked: window.backend.restoreImage(Number(filteredRow.key)) }
                             }
                         }
                     }
                 }
             }
-            ActionButton { theme: theme; text: "Fechar"; onClicked: filteredDialog.close() }
         }
     }
     SurfaceDialog {
         id: messageDialog; objectName: "messageDialog"; theme: theme
         width: Math.min(window.width - 48, 560)
+        height: Math.min(implicitHeight, window.height - 48)
         property bool confirmation: false
+        property string kind: "info"
+        tone: kind === "error" ? "danger" : confirmation ? "warning" : "info"
+        onOpened: messageCancel.forceActiveFocus(Qt.PopupFocusReason)
         onRejected: if (confirmation) window.backend.answer(false)
-        contentItem: ColumnLayout {
-            spacing: 20
-            Text { id: messageText; color: theme.text; font.pixelSize: theme.bodySize; wrapMode: Text.Wrap; Layout.fillWidth: true }
-            RowLayout {
-                Item { Layout.fillWidth: true }
-                ActionButton { theme: theme; text: messageDialog.confirmation ? "Cancelar" : "OK"; onClicked: { if (messageDialog.confirmation) window.backend.answer(false); messageDialog.close(); } }
-                ActionButton { theme: theme; visible: messageDialog.confirmation; text: "Descartar"; onClicked: { messageDialog.close(); window.backend.answer(true); } }
+        onClosed: {
+            if (confirmation) window.backend.answer(false);
+            Qt.callLater(function() {
+                if (!messageDialog.visible && window.messageQueue.length) {
+                    let next = window.messageQueue.shift();
+                    window.showMessage(next.title, next.message, next.kind);
+                }
+            });
+        }
+        contentItem: ScrollView {
+            id: messageScroll
+            implicitHeight: messageText.implicitHeight
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: SurfaceScrollBar { theme: theme }
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            TextEdit {
+                textFormat: TextEdit.PlainText
+                readOnly: true; selectByMouse: true; persistentSelection: true
+                selectionColor: theme.selection; selectedTextColor: theme.text
+                id: messageText; objectName: "messageText"
+                width: messageScroll.availableWidth
+                color: theme.text; font.pixelSize: theme.bodySize
+                wrapMode: TextEdit.Wrap
             }
+        }
+        footer: DialogActions {
+            theme: theme
+            ActionButton { objectName: "discardAction"; theme: theme; visible: messageDialog.confirmation; text: "Descartar"; destructive: true; onClicked: { messageDialog.confirmation = false; messageDialog.close(); window.backend.answer(true); } }
+            ActionButton { id: messageCancel; objectName: "messageCancelAction"; theme: theme; text: messageDialog.confirmation ? "Cancelar" : "OK"; primary: !messageDialog.confirmation; onClicked: { if (messageDialog.confirmation) window.backend.answer(false); messageDialog.close(); } }
         }
     }
     SurfaceDialog {
-        id: linkDialog; objectName: "linkDialog"; theme: theme; onClosed: editor.forceActiveFocus(); title: "Inserir link"; width: Math.min(window.width - 48, 500)
-        contentItem: ColumnLayout {
-            spacing: 12
-            Text { text: "Texto"; color: theme.muted; font.pixelSize: theme.bodySize }
-            Field { id: linkLabel; theme: theme; Layout.fillWidth: true; Accessible.name: "Texto do link" }
-            Text { text: "Destino"; color: theme.muted; font.pixelSize: theme.bodySize }
-            Field { id: linkDestination; theme: theme; Layout.fillWidth: true; Accessible.name: "Destino do link"; placeholderText: "https://… ou caminho relativo" }
-            RowLayout {
-                Item { Layout.fillWidth: true }
-                ActionButton { theme: theme; text: "Cancelar"; onClicked: linkDialog.close() }
-                ActionButton { theme: theme; text: "Inserir link"; primary: true; enabled: linkDestination.text.trim().length > 0; onClicked: { window.backend.insertLink(linkLabel.text, linkDestination.text); linkDialog.close(); } }
+        id: linkDialog; objectName: "linkDialog"; theme: theme; onClosed: editor.forceActiveFocus(); title: "Inserir link"
+        width: Math.min(window.width - 48, 500)
+        height: Math.min(implicitHeight, window.height - 48)
+        contentItem: ScrollView {
+            id: linkScroll
+            implicitHeight: linkFields.implicitHeight
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: SurfaceScrollBar { theme: theme }
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ColumnLayout {
+                id: linkFields; width: linkScroll.availableWidth; spacing: 10
+                Text { textFormat: Text.PlainText; text: "Texto"; color: theme.muted; font.pixelSize: theme.bodySize }
+                Field { id: linkLabel; objectName: "linkLabel"; theme: theme; Layout.fillWidth: true; Accessible.name: "Texto do link" }
+                Text { textFormat: Text.PlainText; text: "Destino"; color: theme.muted; font.pixelSize: theme.bodySize }
+                Field { id: linkDestination; objectName: "linkDestination"; theme: theme; Layout.fillWidth: true; Accessible.name: "Destino do link"; placeholderText: "https://… ou caminho relativo" }
             }
+        }
+        footer: DialogActions {
+            theme: theme
+            ActionButton { theme: theme; text: "Inserir link"; primary: true; enabled: linkDestination.text.trim().length > 0; onClicked: { window.backend.insertLink(linkLabel.text, linkDestination.text); linkDialog.close(); } }
+            ActionButton { theme: theme; text: "Cancelar"; onClicked: linkDialog.close() }
         }
     }
     SurfaceDialog {
-        id: options; objectName: "options"; theme: theme; title: "Opções de exportação"; width: Math.min(window.width - 48, 500)
-        contentItem: ColumnLayout {
-            spacing: 12
-            Toggle { theme: theme; text: "Remover marcações de página na exportação"; checked: window.backend.stripMarkers; enabled: window.backend.editable; onToggled: window.backend.setStripMarkers(checked) }
-            Text { text: "Afeta somente a cópia salva no vault."; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.Wrap; Layout.fillWidth: true }
+        id: options; objectName: "options"; theme: theme; title: "Opções"
+        width: Math.min(window.width - 48, 500)
+        height: Math.min(implicitHeight, window.height - 48)
+        contentItem: ScrollView {
+            id: optionsScroll
+            implicitHeight: optionsFields.implicitHeight
+            contentWidth: availableWidth
+            clip: true
+            ScrollBar.vertical: SurfaceScrollBar { theme: theme }
+            ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
+            ColumnLayout {
+                id: optionsFields; width: optionsScroll.availableWidth; spacing: 12
+                Toggle { objectName: "nextOcrModeAction"; theme: theme; Layout.fillWidth: true; text: "OCR automático nas próximas conversões"; checked: window.backend.worker.ocrMode === "auto"; enabled: !window.backend.worker.busy; onToggled: window.backend.worker.setOcrMode(checked ? "auto" : "off") }
+                Text { textFormat: Text.PlainText; Layout.fillWidth: true; text: window.backend.worker.recognitionStatus + " Não altera o documento atual."; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.WordWrap }
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
+                Toggle { objectName: "reducedMotionAction"; theme: theme; Layout.fillWidth: true; text: "Reduzir movimento"; checked: window.backend.visualSettings.reducedMotion; onToggled: window.backend.visualSettings.setReducedMotion(checked) }
+                Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
+                Toggle { theme: theme; Layout.fillWidth: true; text: "Remover marcações de página na exportação"; checked: window.backend.stripMarkers; enabled: window.backend.editable; onToggled: window.backend.setStripMarkers(checked) }
+                Text { textFormat: Text.PlainText; text: "Afeta somente a cópia salva no vault. Os marcadores continuam disponíveis durante a revisão."; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            }
+        }
+        footer: DialogActions {
+            theme: theme
             ActionButton { theme: theme; text: "Fechar"; onClicked: options.close() }
         }
     }

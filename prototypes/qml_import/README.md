@@ -1,6 +1,6 @@
 # Protótipo isolado de importação — Qt Quick/QML
 
-Estudo visual inspirado no Raycast: fundo grafite, superfícies discretas, destaque coral, fonte local do sistema, hierarquia tipográfica e ações compactas. Este executável continua demonstrativo. A aplicação principal já usa os mesmos componentes para importação e progresso reais.
+Estudo visual inspirado no Raycast: fundo quase preto, superfícies em cinza, destaque neutro, fontes Geist locais, hierarquia tipográfica e ações compactas. Este executável continua demonstrativo. A aplicação principal já usa os mesmos componentes para importação e progresso reais.
 
 ![Prévia em 1120 × 760](preview.png)
 
@@ -30,7 +30,7 @@ A aplicação de produção continua sendo iniciada por `.venv/bin/pdf-obsidian`
 - Layout central com largura máxima, quebra de texto e rolagem quando a janela não comporta o conteúdo.
 - Comunicação demonstrativa `importRequested(mode)` → slot Python → sinal de mensagem → propriedade QML. O controlador aceita apenas os modos `single` e `batch` e não acessa arquivos.
 
-**Abrir PDF** e **Converter em lote…** apenas exibem mensagens. Não há seletor de arquivos, conversão, worker, progresso simulado, editor, exportação ou persistência. A sequência Importar → Revisar → Salvar é uma orientação estática.
+**Abrir PDF** e **Converter em lote…** apenas exibem mensagens. Não há seletor de arquivos, conversão, worker, progresso simulado, editor, exportação ou persistência. O protótipo compartilha a identidade Monochrome Premium descrita em [DESIGN_SYSTEM.md](../../DESIGN_SYSTEM.md).
 
 A criação original deste protótipo restringiu-se a esta pasta. Nas etapas seguintes, autorizadas pelo usuário, a coordenação Python foi extraída e a tela de importação QML foi integrada à aplicação principal. O protótipo continua demonstrativo; seus componentes visuais foram movidos para o pacote da aplicação e são reutilizados aqui. Consulte o estado atual em [MIGRATION.md](MIGRATION.md). Nenhum PDF pessoal ou vault foi utilizado.
 

@@ -75,3 +75,4 @@ class ConversionResult:
     decisions: list[str] = field(default_factory=list)
     assets: list[AssetInfo] = field(default_factory=list)
     filtered_images: list[FilteredImage] = field(default_factory=list)
+    recognition: dict | None = None

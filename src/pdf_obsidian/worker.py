@@ -6,7 +6,7 @@ import traceback
 def run(commands, events, cancel):
     from .converter import convert, make_crop, ConversionCancelled
     from .pdf import render
-    from .exporter import export_document, export_signature
+    from .exporter import export_document, export_signature, export_intact
     while True:
         command = commands.get()
         if command[0] == "stop":
@@ -28,7 +28,8 @@ def run(commands, events, cancel):
             try:
                 if task == "session_convert":
                     result = convert(Path(source), Path(workspace),
-                                     lambda n, total: session_emit("progress", n, total), cancel.is_set)
+                                     lambda n, total: session_emit("progress", n, total), cancel.is_set,
+                                     options=args[0] if args else None, stage=lambda text: session_emit("stage", text))
                     session_emit("converted", result)
                 else:
                     page, bbox = args
@@ -43,10 +44,12 @@ def run(commands, events, cancel):
             try:
                 signature = export_signature(result, markdown, strip_page_markers=strip,
                                              cleanup_removals=removals)
-                unchanged = bool(record and record.signature == signature and record.target.is_dir())
+                unchanged = bool(record and record.signature == signature and export_intact(record, vault))
+                manifest = dict(record.manifest) if unchanged else {}
                 target = record.target if unchanged else export_document(
-                    result, vault, markdown, strip_page_markers=strip, cleanup_removals=removals)
-                events.put(("session_export", token, session_id, revision, True, signature, str(target), unchanged))
+                    result, vault, markdown, strip_page_markers=strip, cleanup_removals=removals, manifest=manifest)
+                divergent = bool(record and record.signature == signature and not unchanged)
+                events.put(("session_export", token, session_id, revision, True, signature, str(target), unchanged, manifest, divergent))
             except Exception as exc:
                 events.put(("session_export", token, session_id, revision, False, str(exc), "", False))
             continue
@@ -58,9 +61,10 @@ def run(commands, events, cancel):
                 if cancel.is_set():
                     raise ConversionCancelled()
                 if task == "batch_convert":
-                    source, workspace = args
+                    source, workspace, *option_args = args
                     result = convert(Path(source), Path(workspace),
-                                     lambda n, total: emit("progress", n, total), cancel.is_set)
+                                     lambda n, total: emit("progress", n, total), cancel.is_set,
+                                     options=option_args[0] if option_args else None, stage=lambda text: emit("stage", text))
                     emit("converted", result)
                 else:
                     if task == "batch_check":
@@ -72,12 +76,13 @@ def run(commands, events, cancel):
                     if cancel.is_set():
                         raise ConversionCancelled()
                     if task == "batch_check":
-                        unchanged = bool(record and record.signature == signature and record.target.is_dir())
+                        unchanged = bool(record and record.signature == signature and export_intact(record, record.target.parent.parent))
                         emit("checked", signature, unchanged, str(record.target) if unchanged else "")
                     else:
+                        manifest = {}
                         target = export_document(result, vault, markdown, strip_page_markers=strip,
-                                                 cleanup_removals=removals)
-                        emit("exported", signature, str(target))
+                                                 cleanup_removals=removals, manifest=manifest)
+                        emit("exported", signature, str(target), manifest)
             except ConversionCancelled:
                 emit("cancelled")
             except Exception as exc:
@@ -85,9 +90,10 @@ def run(commands, events, cancel):
             continue
         try:
             match command:
-                case ("convert", source, workspace):
+                case ("convert", source, workspace, *option_args):
                     result = convert(Path(source), Path(workspace),
-                                     lambda n, total: events.put(("progress", n, total)), cancel.is_set)
+                                     lambda n, total: events.put(("progress", n, total)), cancel.is_set,
+                                     options=option_args[0] if option_args else None, stage=lambda text: events.put(("stage", text)))
                     events.put(("converted", result))
                 case ("render", request_id, source, page, dpi, destination):
                     rect = render(Path(source), page, Path(destination), dpi=dpi)

@@ -183,7 +183,7 @@ class SessionWindowMixin:
 
     def confirm_discard(self, sessions=None):
         candidates = list(self.sessions.values()) if sessions is None else sessions
-        dirty = sum(session.document.isModified() for session in candidates)
+        dirty = sum(session.modified for session in candidates)
         if sessions is None and not any(session.document is self.editor.document() for session in candidates):
             dirty += self.editor.document().isModified()
         if not dirty:

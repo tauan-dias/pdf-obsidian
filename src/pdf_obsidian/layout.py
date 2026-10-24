@@ -23,6 +23,10 @@ def extract_text_block(raw, page, source_block, sizes):
     for raw_line in raw["lines"]:
         parts, styles = [], Counter()
         previous = None
+        dx, dy = raw_line.get('dir', (1, 0))
+        def projected_edges(bbox):
+            x0, y0, x1, y1 = bbox
+            return [x * dx + y * dy for x in (x0, x1) for y in (y0, y1)]
         for span in raw_line["spans"]:
             text = span["text"]
             size = round(span["size"], 1)
@@ -30,7 +34,8 @@ def extract_text_block(raw, page, source_block, sizes):
             sizes[size] += weight
             styles[(size, span.get("font", ""), span.get("flags", 0))] += weight
             if (previous and parts and text and not parts[-1].endswith(" ") and not text.startswith(" ")
-                    and span["bbox"][0] - previous["bbox"][2] >= min(size, previous["size"]) * .15
+                    and min(projected_edges(span['bbox'])) - max(projected_edges(previous['bbox']))
+                    >= min(size, previous["size"]) * .15
                     and text[0] not in ",.;:!?)]}"):
                 parts.append(" ")
             parts.append(text)
@@ -163,7 +168,7 @@ def _append(previous, following, vocabulary):
 def reconstruct_page(page, body_size, heading_sizes, outline, vocabulary):
     """Reconstruir dentro da página, preservando suas âncoras e as imagens."""
     text_blocks = [block for block in page.blocks if block.kind == "text"]
-    images = [block for block in page.blocks if block.kind == "image"]
+    images = [block for block in page.blocks if block.kind != "text"]
     lines = sorted((line for block in text_blocks for line in block.lines),
                    key=lambda line: (round(line.bbox[1] / 3), line.bbox[0]))
     if not lines:

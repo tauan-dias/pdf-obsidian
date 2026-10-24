@@ -1,14 +1,56 @@
 .pragma library
 var colors = {
-    "background": "#18191b", "surface": "#202124", "raised": "#28292d",
-    "hover": "#303136", "border": "#383a40", "text": "#f2f3f5",
-    "muted": "#b0b3bc", "disabled": "#777b85", "accent": "#ff7869",
-    "on_accent": "#201715", "selection": "#49312f", "canvas": "#1b1c1f",
-    "accentHover": "#ff9286", "accentPressed": "#e66c5f"
+    "background": "#090909",
+    "surface": "#141414",
+    "raised": "#1c1c1c",
+    "hover": "#262626",
+    "border": "#303030",
+    "text": "#f5f5f5",
+    "muted": "#a3a3a3",
+    "disabled": "#737373",
+    "accent": "#f5f5f5",
+    "on_accent": "#090909",
+    "selection": "#404040",
+    "canvas": "#0e0e0e",
+    "success": "#e5e5e5",
+    "warning": "#e5e5e5",
+    "danger": "#f5f5f5",
+    "successSurface": "#1c1c1c",
+    "warningSurface": "#1c1c1c",
+    "dangerSurface": "#262626",
+    "overlay": "#bf000000",
+    "imageSelection": "#33ffffff",
+    "accentHover": "#ffffff",
+    "accentPressed": "#d4d4d4",
+    "controlBorder": "#666666",
+    "controlBorderHover": "#a3a3a3"
 };
 var metrics = {
-    "spacing": [4, 8, 12, 16, 24, 32], "controlHeight": 30,
-    "small": 8, "medium": 16, "large": 24, "controlRadius": 8, "panelRadius": 12,
-    "bodySize": 13, "captionSize": 12, "titleSize": 27,
-    "editorSize": 13, "previewSize": 14
+    "spacing": [
+        4,
+        8,
+        12,
+        16,
+        24,
+        32
+    ],
+    "controlHeight": 32,
+    "small": 8,
+    "medium": 16,
+    "large": 24,
+    "controlRadius": 6,
+    "panelRadius": 10,
+    "bodySize": 14,
+    "labelSize": 13,
+    "captionSize": 12,
+    "sectionSize": 18,
+    "titleSize": 28,
+    "editorSize": 15,
+    "previewSize": 15,
+    "iconSize": 18,
+    "motionDuration": 120,
+    "dialogPadding": 24,
+    "readingInset": 16,
+    "menuWidth": 232
 };
+var reviewMetrics = { "editorSize": 15, "previewSize": 15, "readingWidth": 760, "readingInset": 16 };

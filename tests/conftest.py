@@ -5,6 +5,12 @@ os.environ["QT_QPA_PLATFORMTHEME"] = ""
 os.environ["QT_STYLE_OVERRIDE"] = "Fusion"
 os.environ["QT_QUICK_BACKEND"] = "software"
 
+# Unit/regression fixtures must not load multi-GB models implicitly. Explicit
+# OCR integration tools/tests opt into the prepared local directory.
+import tempfile
+_unprepared_ocr = tempfile.TemporaryDirectory(prefix='pdf-obsidian-unprepared-test-ocr-')
+os.environ['PDF_OBSIDIAN_OCR_DIR'] = _unprepared_ocr.name
+
 import pytest
 from PySide6.QtWidgets import QApplication
 

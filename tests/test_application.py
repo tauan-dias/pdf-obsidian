@@ -138,8 +138,8 @@ def make_hooks(allowed=True):
     def factory(result):
         session = SimpleNamespace(result=result, id=str(len(sessions)), exports={}, removals=[], strip_markers=False)
         session.document = SimpleNamespace(toPlainText=lambda: 'Markdown editado')
-        session.record_export = lambda vault, signature, target: session.exports.update(
-            {str(vault): SimpleNamespace(signature=signature, target=Path(target))})
+        session.record_export = lambda vault, signature, target, manifest=None: session.exports.update(
+            {str(vault): SimpleNamespace(signature=signature, target=Path(target), manifest=manifest or {})})
         sessions.append(session)
         return session
     hooks = BatchHooks(lambda: allowed, lambda: snapshots.append(True), factory)
@@ -368,3 +368,22 @@ def test_tagged_session_operations_reject_late_progress_and_terminal_results(con
     controller.runtime.events.put(('session_event', crop[1], 'cropped', 'assets/crop.png'))
     controller.poll()
     assert crops == ['assets/crop.png'] and not controller.busy
+
+
+def test_batch_uses_one_immutable_ocr_snapshot(controller,tmp_path):
+    from pdf_obsidian.recognition import ConversionOptions
+    c=controller
+    c.setOcrMode('off')
+    b=c.attach_batch(BatchHooks(lambda:True,lambda:None,lambda result:result))
+    assert b.start([tmp_path/'one.pdf',tmp_path/'two.pdf'])
+    first=c.runtime.commands.get_nowait()
+    assert first[0]=='batch_convert' and first[-1]==ConversionOptions('off')
+    # Even a programmatic change cannot change the batch snapshot.
+    c.conversion_options=ConversionOptions('auto')
+    b.handle(b.token,b.active.id,'stage','Página 1 · reconhecendo…')
+    assert b.message=='Página 1 · reconhecendo…'
+    b.handle(b.token,b.active.id,'converted',SimpleNamespace())
+    second=c.runtime.commands.get_nowait()
+    assert second[0]=='batch_convert' and second[-1]==ConversionOptions('off')
+    b.handle(b.token,b.active.id,'cancelled')
+    assert not b.running

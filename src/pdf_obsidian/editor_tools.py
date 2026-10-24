@@ -51,10 +51,12 @@ class EditorTools(QWidget):
         adaptive = AdaptiveRow()
         outer.addWidget(adaptive)
         inline, structure = QWidget(), QWidget()
+        inline.setObjectName("toolGroup")
+        structure.setObjectName("toolGroup")
         first = QHBoxLayout(inline)
         layout = QHBoxLayout(structure)
         for group in (first, layout):
-            group.setContentsMargins(0, 0, 0, 0)
+            group.setContentsMargins(3, 3, 3, 3)
             group.setSpacing(2)
         adaptive.row.addWidget(inline)
         adaptive.row.addWidget(structure)
@@ -121,9 +123,9 @@ class EditorTools(QWidget):
         button = QToolButton()
         button.setText(label)
         button.setFixedSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
-        button.setIconSize(QSize(18, 18))
+        button.setIconSize(QSize(20, 20))
         icon_name = value if key.startswith("align:") else key
-        if icon_name in ("left", "center", "right", "justify", "bullet", "ordered", "quote", "link"):
+        if icon_name in ("bold", "italic", "left", "center", "right", "justify", "bullet", "ordered", "quote", "link"):
             button.setIcon(tool_icon(icon_name))
             button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         if key.startswith("align:"):

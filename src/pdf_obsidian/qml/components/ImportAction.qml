@@ -14,7 +14,7 @@ Button {
     hoverEnabled: true
     activeFocusOnTab: true
     padding: theme.medium
-    implicitHeight: Math.max(64, actionContent.implicitHeight + padding * 2)
+    implicitHeight: Math.max(68, actionContent.implicitHeight + padding * 2)
     Accessible.name: text
     Accessible.description: description
 
@@ -24,11 +24,11 @@ Button {
              : control.primary ? (control.down ? control.theme.accentPressed
                                    : control.hovered ? control.theme.accentHover : control.theme.accent)
              : control.down ? control.theme.border
-             : control.hovered ? control.theme.hover : control.theme.raised
+             : control.hovered ? control.theme.hover : control.theme.surface
         border.width: 1
         border.color: control.visualFocus ? control.theme.text
-                    : control.primary ? "transparent" : control.theme.border
-        Behavior on color { ColorAnimation { duration: 100 } }
+                    : control.primary ? "transparent" : control.hovered ? control.theme.controlBorderHover : control.theme.controlBorder
+        Behavior on color { ColorAnimation { duration: control.theme.motionDuration } }
         Rectangle {
             anchors.fill: parent
             anchors.margins: -3
@@ -51,6 +51,7 @@ Button {
             spacing: 3
             Layout.fillWidth: true
             Text {
+                textFormat: Text.PlainText
                 text: control.text
                 color: control.foreground
                 font.family: control.theme.fontFamily
@@ -60,6 +61,7 @@ Button {
                 wrapMode: Text.WordWrap
             }
             Text {
+                textFormat: Text.PlainText
                 visible: control.description.length > 0
                 text: control.description
                 color: control.primary ? control.theme.accentText : control.theme.muted
@@ -75,8 +77,9 @@ Button {
             implicitHeight: keyLabel.implicitHeight + 8
             radius: 4
             color: "transparent"
-            border.color: control.primary ? "#663c2e29" : control.theme.border
+            border.color: control.primary ? control.theme.accentText : control.theme.border
             Text {
+                textFormat: Text.PlainText
                 id: keyLabel
                 anchors.centerIn: parent
                 text: control.shortcutHint

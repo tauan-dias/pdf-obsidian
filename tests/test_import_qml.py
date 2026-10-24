@@ -299,7 +299,7 @@ def test_application_font_change_reaches_qml_under_qss(imported_ui, app):
         app.processEvents()
 
 
-def test_reopen_veto_and_file_dialog_cancel_keep_edits(imported_ui, manual_source, monkeypatch):
+def test_reopen_veto_and_file_dialog_cancel_keep_edits(imported_ui, manual_source, monkeypatch, app):
     window, wait, _ = imported_ui
     monkeypatch.setattr(QFileDialog, 'getOpenFileName', lambda *args: (str(manual_source), 'PDF'))
     click(window, 'openPdfAction')
@@ -313,6 +313,8 @@ def test_reopen_veto_and_file_dialog_cancel_keep_edits(imported_ui, manual_sourc
     monkeypatch.setattr(QFileDialog, 'getOpenFileName', lambda *args: selected.append(True) or ('', ''))
     monkeypatch.setattr(QMessageBox, 'question', lambda *args: prompted.append(True) or QMessageBox.No)
     window.editor.setFocus()
+    app.processEvents()
+    wait(lambda: not window.busy and not window.render_timer.isActive() and window.open_button.isEnabled())
     QTest.keyClick(window.editor, Qt.Key_O, Qt.ControlModifier)
     assert prompted == [True] and selected == []
     monkeypatch.setattr(QMessageBox, 'question', lambda *args: QMessageBox.Yes)
