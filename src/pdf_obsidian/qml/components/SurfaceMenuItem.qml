@@ -19,7 +19,7 @@ MenuItem {
     }
     background: Rectangle {
         color: control.highlighted || control.hovered ? control.theme.hover : "transparent"
-        radius: 5
+        radius: control.theme.menuItemRadius
         border.color: control.visualFocus ? control.theme.accent : "transparent"
     }
 }

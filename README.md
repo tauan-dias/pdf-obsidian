@@ -167,7 +167,7 @@ Durante a preparação de uma página, você pode continuar navegando, ajustando
 
 ## Limites
 
-Este MVP usa heurísticas: revise a hierarquia dos títulos, listas, figuras e ordem de leitura. Tabelas e fórmulas reconhecidas por símbolos matemáticos são convertidas em imagens; casos não reconhecidos podem exigir recorte manual. PDFs sem texto extraível geram avisos e podem ser preservados por recortes. Não há OCR, transcrição LaTeX ou suporte garantido a múltiplas colunas. O objetivo é preservar conteúdo para estudo, não reproduzir paginação no Markdown. Lotes mantêm os textos convertidos e seus históricos em memória até fechar a aplicação; muitos documentos grandes podem exigir mais memória e espaço temporário.
+A conversão usa heurísticas: revise a hierarquia dos títulos, listas, figuras e ordem de leitura. O OCR local complementa texto, tabelas e fórmulas quando os modelos estão preparados, preservando imagens para conferência. Com OCR desligado ou indisponível, a extração direta continua e regiões sem texto nativo exigem revisão pelas imagens ou recortes. Não há suporte garantido a múltiplas colunas; fórmulas em LaTeX precisam ser conferidas no Obsidian. O objetivo é preservar conteúdo para estudo, não reproduzir paginação no Markdown. Lotes mantêm os textos convertidos e seus históricos em memória até fechar a aplicação; muitos documentos grandes podem exigir mais memória e espaço temporário.
 
 A renderização da prévia Qt pode diferir do Obsidian. A validação visual no Obsidian desktop e Android é uma etapa manual de aceite. O aplicativo não implementa sincronização.
 

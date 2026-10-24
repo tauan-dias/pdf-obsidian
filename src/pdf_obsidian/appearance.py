@@ -111,6 +111,7 @@ def apply_theme(window):
         QLabel#brand {{ font-size: {round(METRICS['titleSize'] * scale)}px; font-weight: 600; }}
         QLabel#section {{ font-weight: 600; }}
         QLabel#muted {{ color: {c['muted']}; }}
+        QLabel#formLabel {{ color: {c['muted']}; font-size: {round(METRICS['labelSize'] * scale)}px; font-weight: 500; }}
         QLabel#eyebrow {{ color: {c['accent']}; font-weight: 600; }}
         QFrame#separator {{ background: {c['border']}; border: 0; }}
         QPushButton {{ background: {c['surface']}; border: 1px solid {c['controlBorder']}; border-radius: 6px; padding: 5px 10px; min-height: 20px; }}
@@ -131,10 +132,10 @@ def apply_theme(window):
         QDoubleSpinBox:focus, QLineEdit:focus, QPlainTextEdit:focus, QTextBrowser:focus,
         QTreeWidget:focus, QListWidget:focus, QCheckBox:focus {{ border: 2px solid {c['accent']}; }}
         QCheckBox:disabled, QLabel:disabled, QPushButton:disabled, QToolButton:disabled {{ color: {c['disabled']}; }}
-        QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; font-weight: 600; padding: 7px 14px; }}
+        QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; font-weight: 600; padding: 7px 14px; border: 2px solid transparent; }}
         QPushButton#primary:hover {{ background: {c['accentHover']}; }}
         QPushButton#primary:pressed {{ background: {c['accentPressed']}; }}
-        QPushButton#primary:focus {{ border: 1px solid {c['text']}; }}
+        QPushButton#primary:focus {{ background: {c['background']}; color: {c['text']}; border: 2px solid {c['text']}; }}
         QPushButton#primary:disabled {{ background: {c['raised']}; color: {c['disabled']}; }}
         QPlainTextEdit, QTextBrowser {{ background: {c['canvas']}; border: 1px solid transparent; border-radius: 6px; padding: 16px; }}
         QPlainTextEdit#markdownEditor {{ font-family: "{mono}"; font-size: {round(METRICS["editorSize"] * scale)}px; }}

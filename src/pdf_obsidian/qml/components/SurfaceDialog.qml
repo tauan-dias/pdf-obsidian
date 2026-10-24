@@ -43,7 +43,7 @@ Dialog {
             color: control.theme.text
             font.family: control.theme.fontFamily
             font.pixelSize: control.theme.sectionSize
-            font.weight: Font.Medium
+            font.weight: Font.DemiBold
             wrapMode: Text.WordWrap
         }
     }

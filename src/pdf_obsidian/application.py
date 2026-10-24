@@ -113,8 +113,10 @@ class ApplicationController(QObject):
             self.conversion_options = options
             self.conversionOptionsChanged.emit()
 
-    @Property(str, constant=True)
+    @Property(str, notify=conversionOptionsChanged)
     def recognitionStatus(self):
+        if self.ocrMode == 'off':
+            return 'OCR desligado. Apenas texto nativo e imagens serão extraídos.'
         return resource_status()[1]
 
     @Property(str, notify=conversionStageChanged)

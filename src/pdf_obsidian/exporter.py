@@ -84,8 +84,15 @@ def _prepare_export(result, markdown=None, *, strip_page_markers=False, cleanup_
     markers_removed = 0
     if strip_page_markers:
         final_markdown, markers_removed = strip_page_comments(final_markdown, len(result.pages))
-    available = {path.relative_to(result.workspace).as_posix(): path
-                 for path in (result.workspace / "assets").rglob("*") if path.is_file()}
+    assets = result.workspace / "assets"
+    if assets.is_symlink():
+        raise ValueError("A pasta de anexos temporários foi substituída por um link simbólico. Converta novamente.")
+    available = {}
+    for path in assets.rglob("*"):
+        if path.is_symlink():
+            raise ValueError("Anexo temporário contém link simbólico: " + path.relative_to(result.workspace).as_posix())
+        if path.is_file():
+            available[path.relative_to(result.workspace).as_posix()] = path
     analysis = analyse_markdown(final_markdown, available)
     missing = analysis.references - available.keys()
     if missing:

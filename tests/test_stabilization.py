@@ -55,6 +55,33 @@ def test_small_body_figure_is_not_discarded(tmp_path):
     assert result.assets[0].path in result.markdown
 
 
+@pytest.mark.parametrize('link_kind', ['file', 'directory', 'root', 'dangling'])
+def test_export_rejects_linked_temporary_assets(tmp_path, link_kind):
+    result = convert(synthetic(tmp_path / 'documento.pdf'), tmp_path / 'work')
+    before = file_hash(result.source)
+    external = tmp_path / 'external'
+    external.mkdir()
+    secret = external / 'private.txt'
+    secret.write_text('Conteudo externo que nao deve ser publicado')
+    assets = result.workspace / 'assets'
+    if link_kind == 'root':
+        assets.rename(result.workspace / 'assets-preserved')
+        assets.symlink_to(external, target_is_directory=True)
+    elif link_kind == 'directory':
+        (assets / 'linked').symlink_to(external, target_is_directory=True)
+    else:
+        asset = result.workspace / result.assets[0].path
+        asset.unlink()
+        asset.symlink_to(secret if link_kind == 'file' else external / 'missing')
+    vault = tmp_path / 'vault'
+    vault.mkdir()
+    with pytest.raises(ValueError, match='link simbólico'):
+        export_document(result, vault)
+    assert not list(vault.iterdir())
+    assert file_hash(result.source) == before
+    assert secret.read_text() == 'Conteudo externo que nao deve ser publicado'
+
+
 @pytest.mark.parametrize('artifact', ('markdown', 'original.pdf', 'conversao.json', 'asset'))
 @pytest.mark.parametrize('change', ('missing', 'modified', 'symlink'))
 def test_republication_preserves_divergent_output(tmp_path, artifact, change):

@@ -37,6 +37,12 @@ QtObject {
     readonly property color imageSelection: colors.imageSelection
     readonly property int menuWidth: Tokens.metrics.menuWidth
     readonly property int iconSize: Tokens.metrics.iconSize
+    readonly property int statusIconSize: Tokens.metrics.statusIconSize
+    readonly property int importIconSize: Tokens.metrics.importIconSize
+    readonly property int chevronSize: Tokens.metrics.chevronSize
+    readonly property int listPadding: Tokens.metrics.listPadding
+    readonly property int mediaRowHeight: Tokens.metrics.mediaRowHeight
+    readonly property int menuItemRadius: Tokens.metrics.menuItemRadius
     property bool reducedMotion: false
     readonly property int motionDuration: reducedMotion ? 0 : Tokens.metrics.motionDuration
     readonly property int dialogPadding: Tokens.metrics.dialogPadding

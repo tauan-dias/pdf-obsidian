@@ -10,7 +10,7 @@ Row {
     Accessible.role: Accessible.StaticText
     Accessible.name: text
     Icon {
-        width: 14; height: 14
+        width: control.theme.statusIconSize; height: control.theme.statusIconSize
         name: control.tone === "success" ? "success" : control.tone === "danger" ? "error" : control.tone === "warning" ? "warning" : "info"
         tint: control.foreground
         anchors.verticalCenter: parent.verticalCenter

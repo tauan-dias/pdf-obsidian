@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 from .appearance import tool_icon, CONTROL_HEIGHT, AdaptiveRow
 from .formatting import format_text, link_label
 from .markdown import utf16_position
+from .tokens import METRICS
 
 
 def python_position(text, qt_position):
@@ -22,11 +23,16 @@ class LinkDialog(QDialog):
         layout = QFormLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        layout.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
         self.label = QLineEdit(label)
         self.destination = QLineEdit()
         self.destination.setPlaceholderText("https://… ou caminho relativo")
-        layout.addRow("Texto", self.label)
-        layout.addRow("Destino", self.destination)
+        for text, field in (("Texto", self.label), ("Destino", self.destination)):
+            caption = QLabel(text)
+            caption.setObjectName("formLabel")
+            caption.setBuddy(field)
+            layout.addRow(caption, field)
         self.buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Inserir link")
         self.buttons.button(QDialogButtonBox.StandardButton.Ok).setObjectName("primary")
@@ -37,6 +43,8 @@ class LinkDialog(QDialog):
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         layout.addRow(self.buttons)
+        available = self.screen().availableGeometry()
+        self.resize(min(480, max(240, available.width() - 48)), self.sizeHint().height())
         (self.destination if label else self.label).setFocus()
 
 
@@ -123,7 +131,7 @@ class EditorTools(QWidget):
         button = QToolButton()
         button.setText(label)
         button.setFixedSize(CONTROL_HEIGHT, CONTROL_HEIGHT)
-        button.setIconSize(QSize(20, 20))
+        button.setIconSize(QSize(METRICS["iconSize"], METRICS["iconSize"]))
         icon_name = value if key.startswith("align:") else key
         if icon_name in ("bold", "italic", "left", "center", "right", "justify", "bullet", "ordered", "quote", "link"):
             button.setIcon(tool_icon(icon_name))

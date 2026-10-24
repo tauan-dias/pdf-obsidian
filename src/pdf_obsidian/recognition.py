@@ -30,17 +30,23 @@ def resource_status(root=None, *, require_environment=True):
     root = Path(root) if root is not None else resource_directory()
     try:
         manifest = json.loads((root / 'manifest.json').read_text())
-        if manifest.get('schema') != 1 or not isinstance(manifest.get('files'), dict) or not manifest['files']:
+        if not isinstance(manifest, dict) or manifest.get('schema') != 1 or not isinstance(manifest.get('files'), dict) or not manifest['files']:
             raise ValueError('Manifesto inválido')
         if require_environment and not (root / 'environment/bin/python').is_file():
             raise ValueError('Ambiente OCR ausente')
-        if any(Path(name).is_absolute() or '..' in Path(name).parts for name in manifest['files']):
+        if any(not name or Path(name).is_absolute() or '..' in Path(name).parts
+               or not (root / name).resolve().is_relative_to(root.resolve())
+               for name in manifest['files']):
             raise ValueError('Caminho inválido no manifesto')
+        if any(not isinstance(digest, str) or len(digest) != 64
+               or any(char not in '0123456789abcdef' for char in digest)
+               for digest in manifest['files'].values()):
+            raise ValueError('Hash inválido no manifesto')
         if any(not (root / name).is_file() for name in manifest['files']):
             raise ValueError('Modelo incompleto')
         return True, 'OCR local pronto · português e inglês', manifest
     except (OSError, ValueError, TypeError):
-        return False, 'OCR não preparado. Execute pdf-obsidian-prepare-ocr.', {}
+        return False, 'OCR indisponível. A conversão preserva texto nativo e imagens. Para preparar ou reparar, execute pdf-obsidian-prepare-ocr.', {}
 
 
 def verify_resources(root, check=None, *, require_environment=True):

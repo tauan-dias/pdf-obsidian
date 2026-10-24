@@ -63,6 +63,7 @@ def test_local_url_progress_and_result_handoff(controller, tmp_path):
     runtime.events.put(('progress', 3, 10))
     controller.poll()
     assert progress == [(3, 10)]
+
     results = []
     sentinel = object()
     def receive(result):
@@ -76,6 +77,20 @@ def test_local_url_progress_and_result_handoff(controller, tmp_path):
     assert results == [sentinel]
     assert controller.busy and controller.operation == 'render'
     assert progress == [(3, 10)]
+
+
+def test_recognition_status_tracks_mode_without_changing_active_work(controller):
+    updates = []
+    controller.conversionOptionsChanged.connect(lambda: updates.append(controller.recognitionStatus))
+    assert 'OCR indisponível' in controller.recognitionStatus
+    controller.setOcrMode('off')
+    assert updates == ['OCR desligado. Apenas texto nativo e imagens serão extraídos.']
+    controller.set_state(True, 'convert')
+    controller.setOcrMode('auto')
+    assert controller.ocrMode == 'off' and len(updates) == 1
+    controller.set_state(False, '')
+    controller.setOcrMode('auto')
+    assert 'OCR indisponível' in updates[-1]
 
 
 @pytest.mark.parametrize('event,signal', [('cancelled', 'conversionCancelled'), ('error', 'operationFailed')])

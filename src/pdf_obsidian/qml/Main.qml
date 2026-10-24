@@ -165,7 +165,7 @@ ApplicationWindow {
             ToolButton { theme: theme; text: window.pdfVisible ? "Ocultar PDF" : "Mostrar PDF"; onClicked: { window.pdfVisible = !window.pdfVisible; window.saveView(); } }
             Toggle { theme: theme; text: "Acompanhar página"; checked: window.follow; onToggled: { window.follow = checked; if (checked) window.backend.follow_page(); window.saveView(); } }
             ToolButton { theme: theme; iconName: "image"; text: "Imagens filtradas (" + window.backend.filteredCount + ")"; visible: window.backend.filteredCount > 0; enabled: window.backend.editable; onClicked: { window.backend.openFiltered(); filteredDialog.open(); } }
-            ToolButton { theme: theme; iconName: "warning"; text: "Avisos (" + window.backend.warnings.length + ")"; selected: window.warningsExpanded; visible: window.backend.warnings.length > 0; onClicked: { window.warningsExpanded = !window.warningsExpanded; window.saveView(); } }
+            ToolButton { theme: theme; iconName: "warning"; text: "Avisos (" + window.backend.warnings.length + ")"; selected: window.warningsExpanded; menuIndicator: true; expanded: window.warningsExpanded; visible: window.backend.warnings.length > 0; onClicked: { window.warningsExpanded = !window.warningsExpanded; window.saveView(); } }
         }
         Rectangle {
             visible: window.warningsExpanded && window.backend.warnings.length > 0
@@ -288,9 +288,9 @@ ApplicationWindow {
                 ColumnLayout {
                     anchors.fill: parent; spacing: 0
                     RowLayout {
-                        Layout.fillWidth: true; Layout.margins: 10; spacing: 6
-                        ActionButton { id: markdownTab; objectName: "markdownTab"; theme: theme; text: "Markdown"; compact: true; Accessible.role: Accessible.PageTab; Accessible.selected: selected; Keys.onRightPressed: { window.tab = 1; previewTab.forceActiveFocus(); window.saveView(); } selected: window.tab === 0; onClicked: { window.tab = 0; editor.forceActiveFocus(); window.saveView(); } }
-                        ActionButton { id: previewTab; objectName: "previewTab"; theme: theme; text: "Prévia"; compact: true; Accessible.role: Accessible.PageTab; Accessible.selected: selected; Keys.onLeftPressed: { window.tab = 0; markdownTab.forceActiveFocus(); window.saveView(); } selected: window.tab === 1; onClicked: { window.tab = 1; preview.forceActiveFocus(); window.saveView(); } }
+                        Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8; Layout.topMargin: 4; Layout.bottomMargin: 4; spacing: 6
+                        TabButton { id: markdownTab; objectName: "markdownTab"; theme: theme; text: "Markdown"; compact: true; Accessible.role: Accessible.PageTab; Accessible.selected: selected; Keys.onRightPressed: { window.tab = 1; previewTab.forceActiveFocus(); window.saveView(); } selected: window.tab === 0; onClicked: { window.tab = 0; editor.forceActiveFocus(); window.saveView(); } }
+                        TabButton { id: previewTab; objectName: "previewTab"; theme: theme; text: "Prévia"; compact: true; Accessible.role: Accessible.PageTab; Accessible.selected: selected; Keys.onLeftPressed: { window.tab = 0; markdownTab.forceActiveFocus(); window.saveView(); } selected: window.tab === 1; onClicked: { window.tab = 1; preview.forceActiveFocus(); window.saveView(); } }
                         Item { Layout.fillWidth: true }
                         ToolGroup { theme: theme
                         ToolButton { theme: theme; objectName: "undoAction"; iconName: "undo"; description: "Desfazer"; shortcutHint: "Ctrl+Z"; Accessible.name: "Desfazer"; enabled: window.backend.canUndo; onClicked: window.backend.undo() }
@@ -300,7 +300,7 @@ ApplicationWindow {
                     Flow {
                         visible: window.tab === 0
                         objectName: "editorToolbar"
-                        Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 12; spacing: 8
+                        Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 8; spacing: 8
                         enabled: window.backend.editable
                         ToolGroup {
                             theme: theme
@@ -334,7 +334,7 @@ ApplicationWindow {
                     }
                     Flow {
                         visible: window.tab === 1
-                        Layout.fillWidth: true; Layout.margins: 8; spacing: 8
+                        Layout.fillWidth: true; Layout.leftMargin: 8; Layout.rightMargin: 8; Layout.bottomMargin: 4; spacing: 4
                         Toggle { objectName: "selectImagesAction"; theme: theme; text: "Selecionar imagens"; checked: window.backend.selectionMode; enabled: window.backend.previewReady; onToggled: window.backend.setSelectionMode(checked) }
                         Text { textFormat: Text.PlainText; visible: window.backend.selectionMode; text: window.backend.selectedImages + " selecionadas"; color: theme.muted; font.pixelSize: theme.captionSize; height: 32; verticalAlignment: Text.AlignVCenter }
                         ActionButton { theme: theme; objectName: "removeImagesAction"; visible: window.backend.selectionMode; text: "Remover selecionadas"; destructive: true; description: "Remover as imagens selecionadas; use Desfazer para restaurar"; enabled: window.backend.previewReady && window.backend.selectedImages > 0; onClicked: window.backend.removeImages() }
@@ -507,7 +507,7 @@ ApplicationWindow {
             OperationProgress { theme: theme; visible: window.backend.batchRunning; Layout.fillWidth: true; from: 0; to: Math.max(1, window.backend.batchTotal); value: window.backend.batchCurrent; indeterminate: window.backend.batchTotal === 0 }
             ListView {
                 id: documentList; objectName: "documentList"
-                Text { textFormat: Text.PlainText; anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: "Os documentos convertidos aparecerão aqui."; visible: documentList.count === 0; color: theme.muted; font.pixelSize: theme.bodySize }
+                Text { textFormat: Text.PlainText; anchors.centerIn: parent; width: parent.width - 32; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; text: "Nenhum documento nesta sessão.\nUse Novo lote para adicionar PDFs e iniciar a revisão."; visible: documentList.count === 0; color: theme.muted; font.pixelSize: theme.bodySize }
                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                 model: window.backend.documentModel; spacing: 6
                 ScrollBar.vertical: SurfaceScrollBar { theme: theme }
@@ -568,10 +568,10 @@ ApplicationWindow {
                     required property bool restorable
                     required property string issue
                     Component.onCompleted: window.backend.reviewFiltered(Number(key))
-                    width: ListView.view.width; height: Math.max(125, filteredText.implicitHeight + 20)
-                    radius: 8; color: theme.raised
+                    width: ListView.view.width; height: Math.max(theme.mediaRowHeight, filteredText.implicitHeight + theme.listPadding * 2)
+                    radius: theme.controlRadius; color: theme.raised
                     RowLayout {
-                        anchors.fill: parent; anchors.margins: 10; spacing: 12
+                        anchors.fill: parent; anchors.margins: theme.listPadding; spacing: 12
                         Image { source: filteredRow.thumbnail; Layout.preferredWidth: 100; Layout.preferredHeight: 70; fillMode: Image.PreserveAspectFit; sourceSize.width: 200; sourceSize.height: 140 }
                         ColumnLayout {
                             id: filteredText; Layout.fillWidth: true
@@ -642,10 +642,10 @@ ApplicationWindow {
             ScrollBar.vertical: SurfaceScrollBar { theme: theme }
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
             ColumnLayout {
-                id: linkFields; width: linkScroll.availableWidth; spacing: 10
-                Text { textFormat: Text.PlainText; text: "Texto"; color: theme.muted; font.pixelSize: theme.bodySize }
+                id: linkFields; width: linkScroll.availableWidth; spacing: 12
+                Text { textFormat: Text.PlainText; text: "Texto"; color: theme.muted; font.pixelSize: theme.labelSize; font.weight: Font.Medium }
                 Field { id: linkLabel; objectName: "linkLabel"; theme: theme; Layout.fillWidth: true; Accessible.name: "Texto do link" }
-                Text { textFormat: Text.PlainText; text: "Destino"; color: theme.muted; font.pixelSize: theme.bodySize }
+                Text { textFormat: Text.PlainText; text: "Destino"; color: theme.muted; font.pixelSize: theme.labelSize; font.weight: Font.Medium }
                 Field { id: linkDestination; objectName: "linkDestination"; theme: theme; Layout.fillWidth: true; Accessible.name: "Destino do link"; placeholderText: "https://… ou caminho relativo" }
             }
         }

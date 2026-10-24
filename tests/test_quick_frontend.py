@@ -1185,6 +1185,7 @@ def test_ocr_mode_is_captured_before_conversion_and_stage_is_displayed(quick, tm
     QTest.keyClick(window, Qt.Key_Space)
     app.processEvents()
     assert c.application.ocrMode == 'off' and page.property('ocrMode') == 'off'
+    assert page.property('ocrStatus').startswith('OCR desligado.')
     c.application.tagged_operations = tagged
     assert c.application.start_conversion(tmp_path/'synthetic.pdf')
     command = runtime.commands.get_nowait()
@@ -1203,6 +1204,7 @@ def test_ocr_mode_is_captured_before_conversion_and_stage_is_displayed(quick, tm
     assert not c.application.conversionStage
     c.application.setOcrMode('auto')
     assert c.application.ocrMode == 'auto'
+    assert page.property('ocrStatus').startswith('OCR indisponível.')
 
 
 def test_next_conversion_ocr_option_does_not_modify_current_document(quick,tmp_path,app):

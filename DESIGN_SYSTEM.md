@@ -9,6 +9,8 @@ Sistema de apresentação local do PDF → Obsidian. Implementado em Qt Quick Co
 - Espaçamentos de 4, 8, 12, 16, 24 e 32 px lógicos. Controles-base de 32 px, raios de 6 px nos controles e 10 px nos diálogos; alturas crescem com fonte e conteúdo.
 - Geist Sans para interface; Geist Mono para edição técnica. Auxiliares 12 px, controles/labels 13 px, corpo 14 px, documentos 15 px, seções 18 px e título inicial 28 px. Fontes ampliadas e DPI continuam suportados. Pesos 400, 500 e 600, com itálicos locais.
 - Recursos oficiais locais: Geist 1.8.2 (SIL OFL 1.1) e subconjunto Lucide 1.61.0 (ISC/MIT). Arquivos e licenças ficam em `src/pdf_obsidian/assets/`; `manifest.json` registra versões e SHA-256. Falha ao carregar fonte usa fallback nativo.
+- Escala semântica de ícones: ferramentas 20 px (Quick/Widgets), estados 14 px, importação 22 px e chevron 12 px. Tamanhos definidos em tokens; SVGs e cores dos documentos permanecem intactos.
+- Botões QML e rótulos de formulário usam peso 500; ação principal e títulos de diálogo usam 600. Campos de texto QML usam corpo de 14 px; rótulos usam 13 px e auxiliares 12 px, respeitando a escala.
 - Os mesmos SVGs são renderizados por QtSvg nos dois frontends. O provedor Quick tem cache limitado de ícones, independente dos documentos. Sem fontes de ícones, serviços externos ou downloads na execução.
 
 ## Componentes
@@ -20,13 +22,19 @@ Sistema de apresentação local do PDF → Obsidian. Implementado em Qt Quick Co
 | Ferramentas | Contorno no grupo; ícones individuais sem caixa permanente, hover individual e foco de teclado de 2 px. |
 | Destrutivo | Verbo explícito, ícone de remoção e confirmação existente; não depende de vermelho. |
 | Campos | Superfície escura, borda interativa, seleção neutra e foco claro; regras de confirmação preservadas. |
-| Abas | Superfície discreta e marcador branco; setas navegam sem modificar o documento. |
+| Abas | Sublinhado branco de 2 px, sem caixa de seleção; hover discreto e contorno somente no foco de teclado. Setas navegam sem modificar o documento. |
 | Listas | Documento, estado e detalhes alinhados, linhas separadas por divisores; ações e seleção preservadas. |
 | Diálogos | Título de seção, ícone semântico quando pertinente, conteúdo rolável e ações em rodapé fixo. |
 | Notificações | Texto simples selecionável, caminhos legíveis, identificação textual e ícones neutros, incluindo mensagens padrão Widgets. |
 | Progresso | Dados reais; indicador indeterminado acompanhado de texto. Modo reduzido mantém indicador estacionário. |
 
 `Tokens.js` é a fonte compartilhada de tokens. `Theme.qml`, componentes QML e `appearance.py` consomem esses valores; `visuals.py` carrega fontes, ícones e a preferência visual de movimento. Estilos técnicos de edição e imagens nunca são aplicados ao PDF original.
+
+`TabButton.qml` diferencia abas dos controles expansíveis. Avisos usa superfície selecionada e chevron para indicar expansão, sem reutilizar o sublinhado das abas. `FocusRing.qml` aplica anel externo branco de 2 px com intervalo escuro de 2 px às ações principais Quick; no Widgets, o botão primário recebe preenchimento escuro, texto branco e borda branca de 2 px no foco, mantendo a largura da borda em repouso para evitar mudança de tamanho.
+
+Listas têm duas variantes intencionais: documentos usam linhas/divisores; mídia usa miniaturas em superfície elevada, raio de controle, margem de 12 px e altura mínima de 104 px, expansível pelo conteúdo. Menus usam raio interno de 4 px. Exceções ópticas de 2–3 px dentro de grupos permanecem.
+
+O diálogo de links Widgets abre com largura preferida de 480 px limitada à tela, rótulos acima dos campos e campos expansíveis. A importação concentra a garantia de preservação no rodapé. A lista vazia de documentos orienta para Novo lote sem duplicar o botão. Barras de revisão têm margens verticais menores, preservando tamanhos dos controles e todos os comandos.
 
 ## Telas e fluxos
 

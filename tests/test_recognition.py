@@ -63,6 +63,27 @@ def test_resource_integrity_and_modes(resources):
         ConversionOptions('force')
 
 
+@pytest.mark.parametrize('manifest', [None, [], 'invalid', 42, {},
+    {'schema': 1, 'files': {'model.bin': None}},
+    {'schema': 1, 'files': {'model.bin': 'z' * 64}},
+    {'schema': 1, 'files': {'../outside': '0' * 64}}])
+def test_malformed_manifest_is_unavailable_without_crashing(resources, manifest):
+    (resources / 'manifest.json').write_text(json.dumps(manifest))
+    ready, message, data = resource_status(resources)
+    assert not ready and not data
+    assert 'preserva texto nativo e imagens' in message
+    with pytest.raises(RuntimeError):
+        verify_resources(resources)
+
+
+def test_resource_status_rejects_external_model_link(resources, tmp_path):
+    external = tmp_path / 'external-model'
+    external.write_bytes((resources / 'model.bin').read_bytes())
+    (resources / 'model.bin').unlink()
+    (resources / 'model.bin').symlink_to(external)
+    assert not resource_status(resources)[0]
+
+
 def test_protocol_rejects_stale_and_out_of_page_output():
     data = dict(id='a', page=1, blocks=[dict(kind='text', bbox=[1, 1, 20, 20], text='ação')])
     assert validate_response(data, 'a', 1, 100, 100)

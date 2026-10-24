@@ -32,7 +32,7 @@ Button {
         text: control.text
         font.family: control.theme.fontFamily
         font.pixelSize: control.theme.labelSize
-        font.weight: control.primary || control.boldLabel ? Font.DemiBold : Font.Normal
+        font.weight: control.primary || control.boldLabel ? Font.DemiBold : Font.Medium
         font.italic: control.italicLabel
         leftPadding: control.destructive ? 20 : 0
         horizontalAlignment: Text.AlignHCenter
@@ -61,11 +61,11 @@ Button {
         opacity: control.enabled ? 1 : 0.65
         Behavior on color { ColorAnimation { duration: control.theme.motionDuration } }
         Behavior on border.color { ColorAnimation { duration: control.theme.motionDuration } }
-        Rectangle {
-            visible: control.selected
-            anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
-            width: Math.min(22, parent.width - 16); height: 2
-            radius: 1; color: control.theme.accent
+        FocusRing {
+            anchors.fill: parent
+            theme: control.theme
+            visible: control.primary && control.visualFocus && control.enabled
         }
+
     }
 }

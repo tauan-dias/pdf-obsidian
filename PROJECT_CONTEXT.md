@@ -2,6 +2,23 @@
 
 Estado atualizado em 24/10/2026, após modernização visual, estabilização técnica e implementação do OCR local. O histórico abaixo registra etapas de desenvolvimento; o estado atual prevalece sobre os relatos anteriores.
 
+## Refinamento visual após revisão frontend-design — 24/10/2026
+
+- Implementadas as melhorias aprovadas de `UI_REVIEW.md`: diálogo de links Widgets com largura preferida de 480 px e campos verticais expansíveis; foco contrastante dos primários; abas sublinhadas próprias; chevron nos avisos; barras com menos espaços verticais; listas de mídia mais compactas; hierarquia de formulário/título; estado vazio orientativo e remoção de mensagem duplicada da importação.
+- `FocusRing.qml` mantém anel externo de 2 px com intervalo escuro nos primários Quick. Widgets usa inversão de superfície/texto com borda branca no foco, mantendo dimensões. `TabButton.qml` preserva comandos, nomes acessíveis, foco e navegação por setas. Tokens semânticos de ícones: ferramentas 20, estado 14, importação 22, chevron 12; recursos SVG/fontes intactos.
+- Preservados títulos da prévia e mensagem completa de OCR: o ganho de área veio das barras, sem alterar documento/renderização. Nenhuma mudança de processamento, publicação, seleção, desfazer/refazer ou filtros. Alterações anteriores mantidas, sem commits/pushes.
+- Validação: 78 testes direcionados em 28,66 s e suíte completa com **380 testes em 86,60 s**; checagem adicional após o ajuste final de foco Widgets registrada em `VALIDATION.md`. Lint QML e protótipo/teclado passaram. Capturas sintéticas em `/tmp/pdf-obsidian-design-refinement/`, com amostras conferidas; foco Quick também em `/tmp/pdf-design-focus.png`. Documentação atualizada em `DESIGN_SYSTEM.md` e `UI_REVIEW.md`. Aceite desktop/GPU e acessibilidade real continuam pendentes.
+
+## Auditoria de produto e confiabilidade — 24/10/2026
+
+- Auditoria e priorização registradas em `AUDIT.md`, com escopo, funcionalidades existentes, limitações e próximos passos. Preservados arquitetura, identidade monocromática, filtros, histórico, anexos relativos e publicação sem sobrescrita.
+- Exportação bloqueia links simbólicos nos anexos temporários (raiz, subpastas e arquivos) antes de criar staging, evitando copiar arquivos externos inesperados. Não altera temporários ou originais.
+- Estado OCR trata manifestos JSON com estrutura inválida, hashes malformados e caminhos resolvidos para fora da pasta de recursos como indisponíveis. Mensagem explica preservação de texto nativo/imagens e preparação/reparo; SHA-256 integral continua antes de usar os modelos.
+- Status OCR reativo compartilhado diferencia modo desligado da disponibilidade, inclusive importação/lote/opções. Recuperação Widgets mostra etapa de OCR e espera de cancelamento. README corrigido onde ainda negava OCR/LaTeX. Digest preexistente incorreto de `fonts/OFL.txt` corrigido no manifesto após confirmar igualdade do arquivo com HEAD; licença/fontes inalteradas.
+- Validação final: **380 testes em 86,61 s**, lint QML, protótipo/teclado, compileall, pip check e diff limpos. 174 capturas geradas com documentos sintéticos, amostras inspecionadas; benchmark real de 100 páginas: 7,148 s conversão/transporte, 0,824 s entrega → frame, 8,179 s até PDF. Sem alegação de ganho de desempenho. Detalhes em `VALIDATION.md`.
+- **Estado deste ambiente:** o `.venv` estava ausente e foi recriado para a auditoria; os modelos/ambiente OCR real NÃO estão preparados neste checkout. As afirmações abaixo de preparação local são históricas. OCR real, Python 3.12, empacotamento wheel e memória não foram revalidados nesta etapa; desktop/GPU, IME, leitor de tela e Obsidian continuam pendentes.
+- Nenhum PDF pessoal/vault real utilizado, commit ou push realizado. O usuário proibiu commits/pushes automáticos nesta missão; isso prevalece sobre a intenção histórica de envio registrada abaixo.
+
 ## OCR local e reconhecimento estruturado — 24/10/2026
 
 - O usuário autorizou e solicitou OCR, substituindo explicitamente a restrição anterior de fora do escopo. Escolhas: automático conservador, páginas mistas, português/inglês, texto/tabelas/fórmulas, estrutura junto à imagem preservada, CPU/8 GB, qualidade equilibrada, dependências/modelos preparados na instalação do projeto sem Tesseract separado. Não foi solicitado instalador portátil.

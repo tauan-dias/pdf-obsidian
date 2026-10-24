@@ -260,6 +260,7 @@ class Window(SessionWindowMixin, QMainWindow):
 
     def _sync_ocr_mode(self):
         self.next_ocr_option.setChecked(self.application.ocrMode == 'auto')
+        self.next_ocr_option.setToolTip(self.application.recognitionStatus + ' Não altera o documento atual.')
 
     def _refresh_theme(self, _font=None):
         apply_theme(self)

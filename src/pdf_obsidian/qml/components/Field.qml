@@ -9,7 +9,7 @@ TextField {
     selectionColor: theme.accent
     selectedTextColor: theme.accentText
     font.family: theme.fontFamily
-    font.pixelSize: theme.labelSize
+    font.pixelSize: theme.bodySize
     padding: 8
     selectByMouse: true
     background: Rectangle {

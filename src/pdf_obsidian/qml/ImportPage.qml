@@ -240,25 +240,7 @@ FocusScope {
                                     onClicked: window.cancelRequested()
                                 }
                             }
-                            Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: tokens.border }
-                            RowLayout {
-                                spacing: 8
-                                Icon {
-                                    name: "shield"
-                                    tint: tokens.muted
-                                    Layout.preferredWidth: 16
-                                    Layout.preferredHeight: 16
-                                }
-                                Text {
-                                    textFormat: Text.PlainText
-                                    text: "Seus PDFs originais permanecem intactos."
-                                    color: tokens.muted
-                                    font.family: tokens.fontFamily
-                                    font.pixelSize: tokens.captionSize
-                                    Layout.fillWidth: true
-                                    wrapMode: Text.WordWrap
-                                }
-                            }
+
                         }
                     }
                     Text {

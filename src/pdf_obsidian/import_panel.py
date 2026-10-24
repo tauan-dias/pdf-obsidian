@@ -42,8 +42,11 @@ class LegacyImportPage(QWidget):
         self.documents_button = QPushButton()
         self.source = ElidedLabel()
         self.progress = QProgressBar()
+        self.stage = QLabel()
+        self.stage.setWordWrap(True)
+        self.stage.setObjectName('muted')
         self.cancel = QPushButton('Cancelar conversão')
-        for widget in (self.open_button, self.batch_button, self.documents_button, self.source, self.progress, self.cancel):
+        for widget in (self.open_button, self.batch_button, self.documents_button, self.source, self.progress, self.stage, self.cancel):
             layout.addWidget(widget)
         self.open_button.clicked.connect(panel.openPdfRequested)
         self.batch_button.clicked.connect(panel.batchRequested)
@@ -57,7 +60,7 @@ class LegacyImportPage(QWidget):
         for button in (self.open_button, self.batch_button):
             button.setVisible(not converting)
             button.setEnabled(state['canImport'])
-        for widget in (self.source, self.progress, self.cancel):
+        for widget in (self.source, self.progress, self.stage, self.cancel):
             widget.setVisible(converting)
         self.ocr.setVisible(not converting)
         self.ocr.setEnabled(state['canImport'])
@@ -70,6 +73,8 @@ class LegacyImportPage(QWidget):
         self.source.setToolTip(state['sourceName'])
         self.progress.setRange(0, state['progressTotal'])
         self.progress.setValue(state['progressCurrent'])
+        self.stage.setText('Aguardando o processamento terminar com segurança…' if cancelling else
+                           state['conversionStage'] or 'Iniciando processamento…')
         self.cancel.setEnabled(converting and not cancelling)
         self.cancel.setText('Cancelando…' if cancelling else 'Cancelar conversão')
         self.documents_button.setVisible(state['documentCount'] > 0)

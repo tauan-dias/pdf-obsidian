@@ -14,7 +14,7 @@ def test_bundled_assets_match_recorded_versions_and_hashes():
     files = {str(p.relative_to(ASSETS)) for p in ASSETS.rglob('*') if p.is_file() and p.name != 'manifest.json'}
     assert files == set(manifest['sha256'])
     for name, digest in manifest['sha256'].items():
-        assert hashlib.sha256((ASSETS / name).read_bytes()).hexdigest() == digest
+        assert hashlib.sha256((ASSETS / name).read_bytes()).hexdigest() == digest, name
     assert 'SIL OPEN FONT LICENSE' in (ASSETS / 'fonts/OFL.txt').read_text()
     assert 'ISC License' in (ASSETS / 'icons/LICENSE').read_text()
 

@@ -246,12 +246,14 @@ def test_scene_error_keeps_progress_and_worker(imported_ui, app):
     worker = window.worker
     window.busy, window.operation = True, 'convert'
     window.update_controls()
+    window.application.set_conversion_stage('Reconhecendo página 2 de 5…')
     window.welcome.update_state(sourceName='sintetico.pdf', progressCurrent=2, progressTotal=5)
     window.welcome.quick.sceneGraphError.emit(QQuickWindow.SceneGraphError.ContextNotAvailable, 'Falha gráfica sintética')
     assert not window.welcome.using_qml
     assert window.welcome.fallback.source.text() == 'sintetico.pdf'
     assert window.welcome.fallback.progress.value() == 2
     assert window.welcome.fallback.progress.maximum() == 5
+    assert window.welcome.fallback.stage.text() == 'Reconhecendo página 2 de 5…'
     app.processEvents()
     assert window.welcome.quick.rootObject() is None
     assert window.worker is worker and worker.is_alive()
@@ -259,6 +261,7 @@ def test_scene_error_keeps_progress_and_worker(imported_ui, app):
     window.welcome.fallback.cancel.click()
     assert window.application.cancellationRequested
     assert not window.welcome.fallback.cancel.isEnabled()
+    assert 'com segurança' in window.welcome.fallback.stage.text()
     window.busy, window.operation = False, None
 
 

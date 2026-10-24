@@ -29,13 +29,10 @@ Button {
         border.color: control.visualFocus ? control.theme.text
                     : control.primary ? "transparent" : control.hovered ? control.theme.controlBorderHover : control.theme.controlBorder
         Behavior on color { ColorAnimation { duration: control.theme.motionDuration } }
-        Rectangle {
+        FocusRing {
             anchors.fill: parent
-            anchors.margins: -3
-            radius: parent.radius + 3
-            color: "transparent"
-            border.width: control.visualFocus ? 1 : 0
-            border.color: control.theme.accent
+            theme: control.theme
+            visible: control.visualFocus && control.enabled
         }
     }
     contentItem: RowLayout {
@@ -44,8 +41,8 @@ Button {
         Icon {
             name: control.iconName
             tint: control.foreground
-            Layout.preferredWidth: 22
-            Layout.preferredHeight: 22
+            Layout.preferredWidth: control.theme.importIconSize
+            Layout.preferredHeight: control.theme.importIconSize
         }
         ColumnLayout {
             spacing: 3

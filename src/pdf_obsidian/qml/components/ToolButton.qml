@@ -4,6 +4,7 @@ ActionButton {
     id: control
     property string iconName: ""
     property bool menuIndicator: false
+    property bool expanded: false
     compact: true
     outlined: !compact
     implicitWidth: Math.max(theme.controlHeight, contents.implicitWidth + 16)
@@ -24,12 +25,14 @@ ActionButton {
             text: control.text
             font.family: control.theme.fontFamily
             font.pixelSize: control.theme.labelSize
+            font.weight: Font.Medium
             color: control.enabled ? control.theme.text : control.theme.disabled
             anchors.verticalCenter: parent.verticalCenter
         }
         Icon {
             visible: control.menuIndicator
-            width: visible ? 12 : 0; height: 12
+            width: visible ? control.theme.chevronSize : 0; height: control.theme.chevronSize
+            rotation: control.expanded ? 180 : 0
             anchors.verticalCenter: parent.verticalCenter
             name: "chevron"
             tint: control.enabled ? control.theme.muted : control.theme.disabled

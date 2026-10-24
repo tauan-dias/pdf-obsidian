@@ -39,10 +39,11 @@ class BatchDialog(QDialog):
             self.ocr.setChecked(window.application.ocrMode == 'auto')
             self.ocr.toggled.connect(lambda enabled: window.application.setOcrMode('auto' if enabled else 'off'))
             layout.addWidget(self.ocr)
-            status = QLabel(window.application.recognitionStatus)
-            status.setWordWrap(True)
-            status.setObjectName('muted')
-            layout.addWidget(status)
+            self.ocr_status = QLabel(window.application.recognitionStatus)
+            self.ocr_status.setWordWrap(True)
+            self.ocr_status.setObjectName('muted')
+            layout.addWidget(self.ocr_status)
+            window.application.conversionOptionsChanged.connect(self.update_ocr_status)
         self.tree = QTreeWidget()
         self.tree.setAccessibleName("Documentos e estados da conversão")
         self.tree.setAlternatingRowColors(True)
@@ -99,6 +100,9 @@ class BatchDialog(QDialog):
         self.tree.itemDoubleClicked.connect(lambda *_: self.review_current())
         self.batch.progress_changed.connect(self.update_progress)
         self.refresh()
+
+    def update_ocr_status(self):
+        self.ocr_status.setText(self.window.application.recognitionStatus)
 
     def add_files(self):
         paths, _ = QFileDialog.getOpenFileNames(self, 'Adicionar PDFs ao lote', '', 'PDF (*.pdf *.PDF)')

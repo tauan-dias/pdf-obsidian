@@ -144,6 +144,9 @@ def test_link_dialog_accept_cancel_and_ctrl_k(editor_ui, app):
     def fill():
         dialog = next(widget for widget in app.topLevelWidgets() if isinstance(widget, LinkDialog) and widget.isVisible())
         observed.append(dialog.label.text())
+        assert dialog.width() >= 480
+        assert dialog.destination.width() >= 400
+        assert dialog.destination.y() > dialog.layout().labelForField(dialog.destination).y()
         dialog.destination.setText("https://example.org")
         dialog.accept()
 
