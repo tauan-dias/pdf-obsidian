@@ -2,6 +2,13 @@
 
 Estado atualizado em 24/10/2026, após modernização visual, estabilização técnica e implementação do OCR local. O histórico abaixo registra etapas de desenvolvimento; o estado atual prevalece sobre os relatos anteriores.
 
+## Auditoria de UI e correções — 24/10/2026
+
+- Usuário pediu auditoria da UI e autorizou corrigir todos os pontos, **usando Git para manter o histórico** (substitui a restrição anterior de não fazer commits nesta etapa; push não foi solicitado).
+- Quick/QML: ferramentas compactas desabilitadas sem caixa de borda; `Documentos (N)` e `Opções` bloqueados durante salvamento; campos de página/zoom acompanham a escala de fonte; feedback antigo da importação oculto/limpo ao iniciar conversão; diálogo de link com foco inicial adequado e Enter para avançar/inserir; Ctrl+Z/Ctrl+Y funcionam na aba Markdown com foco fora do editor; `Ocultar PDF`/`Acompanhar página` desabilitados durante o lote; listas reservam espaço para a barra de rolagem; documentos salvos e depois editados exibem `· Não salvo`.
+- Widgets: indicador de menu nativo removido (rótulos `Listas ▾`/`Alinhar ▾`), separador órfão e stretch interno da barra removidos; rodapé único em imagens filtradas; OCR do lote alinhado à esquerda e foco inicial em Adicionar PDFs; Abrir/Salvar/opções permanecem disponíveis durante a renderização de página; captura `widgets-editor.png` sem estado sintético de renderização.
+- Regressões novas em `tests/test_quick_frontend.py` e `tests/test_appearance.py`; suíte completa com **385 testes em 102,19 s**, protótipo QML 800 × 600/+25% sem avisos. Capturas sintéticas em `/tmp/pdf-obsidian-ui-audit/` (descartáveis). Nenhum PDF pessoal ou vault real utilizado.
+
 ## Refinamento visual após revisão frontend-design — 24/10/2026
 
 - Implementadas as melhorias aprovadas de `UI_REVIEW.md`: diálogo de links Widgets com largura preferida de 480 px e campos verticais expansíveis; foco contrastante dos primários; abas sublinhadas próprias; chevron nos avisos; barras com menos espaços verticais; listas de mídia mais compactas; hierarquia de formulário/título; estado vazio orientativo e remoção de mensagem duplicada da importação.
