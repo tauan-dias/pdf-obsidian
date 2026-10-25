@@ -8,3 +8,4 @@ Antes de trabalhar, leia [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md), que registra 
 - O PDF pessoal na raiz não deve ser alterado, publicado, incluído em commits ou copiado para os testes. Gere PDFs sintéticos para regressões.
 - Preserve edições do usuário, desfazer/refazer, navegação por página e referências relativas dos anexos ao fazer mudanças.
 - Execute verificações pertinentes às alterações. O comando da suíte é `.venv/bin/python -m pytest -q`.
+- Escreva mensagens de commit em português brasileiro no formato `tipo(escopo): descrição`, seguindo Conventional Commits. Use um escopo quando ajudar a identificar a área afetada; exemplos: `feat(ocr): adiciona reconhecimento local` e `fix(qml): corrige foco do diálogo`. Para mudanças sem escopo claro, use `tipo: descrição`. Mantenha a descrição curta, no imperativo e sem ponto final.
