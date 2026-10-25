@@ -160,3 +160,54 @@ def test_semantic_text_colors_meet_contrast_minimum():
     for foreground, background in pairs:
         light, dark = sorted((luminance(COLORS[foreground]), luminance(COLORS[background])), reverse=True)
         assert (light + .05) / (dark + .05) >= 4.5, (foreground, background)
+
+
+def test_widgets_audit_refinements(app, tmp_path):
+    from PySide6.QtGui import QImage
+    from PySide6.QtWidgets import QWidget
+    from pdf_obsidian.batch_dialog import BatchDialog
+    from pdf_obsidian.filtered_images import FilteredImagesDialog
+    from pdf_obsidian.models import AssetInfo, ConversionResult, FilteredImage, Page
+    window = Window()
+    try:
+        window.show()
+        app.processEvents()
+        # First tool group should not end with an orphan trailing separator
+        first_group = window.editor_tools.findChildren(QWidget, 'toolGroup')[0]
+        last_item = first_group.layout().itemAt(first_group.layout().count() - 1).widget()
+        assert last_item.objectName() != 'toolSeparator'
+        assert window.editor_tools.menus['Listas'].text() == 'Listas ▾'
+        assert window.editor_tools.menus['Alinhar'].text() == 'Alinhar ▾'
+        # Simulate loaded document during page render: header actions stay enabled
+        asset = tmp_path / 'assets' / 'p0001-fig001.png'
+        asset.parent.mkdir(parents=True, exist_ok=True)
+        image = QImage(64, 24, QImage.Format.Format_RGBA8888)
+        image.fill(QColor('#285592'))
+        image.save(str(asset))
+        window.receive_single_document(ConversionResult(
+            source=tmp_path / 'doc.pdf', source_hash='synthetic', title='doc',
+            markdown='<!-- Página 1 -->\n\n# Título\n', workspace=tmp_path,
+            pages=[Page(1, 595, 842)], warnings=[],
+            assets=[AssetInfo('assets/p0001-fig001.png', 'pdf', 'filtered_margin', 1, (0, 0, 100, 20), (595, 842), generated_markdown='![Figura](assets/p0001-fig001.png)')],
+            filtered_images=[FilteredImage('assets/p0001-fig001.png', 1, (0, 0, 100, 20), 'Elemento recorrente no cabeçalho', 'sig')]))
+        window.busy, window.operation = True, 'render'
+        window.update_controls()
+        assert window.open_button.isEnabled()
+        assert window.export_button.isEnabled()
+        assert window.export_options.isEnabled()
+        window.busy, window.operation = False, None
+        window.update_controls()
+        filtered = FilteredImagesDialog(window)
+        filtered.show()
+        app.processEvents()
+        assert filtered.show_page.geometry().y() == filtered.restore.geometry().y()
+        filtered.close()
+        batch = BatchDialog(window, preparing=True)
+        batch.show()
+        app.processEvents()
+        assert batch.ocr.width() < batch.width() // 2
+        batch.close()
+    finally:
+        if window.active_session is not None:
+            window.active_session.document.setModified(False)
+        window.close()

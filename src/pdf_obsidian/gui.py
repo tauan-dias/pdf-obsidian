@@ -289,17 +289,18 @@ class Window(SessionWindowMixin, QMainWindow):
         self.warnings_toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
 
     def update_controls(self):
-        self.next_ocr_option.setEnabled(not self.busy)
+        batch_running = hasattr(self, "batch") and self.batch.running
+        idle_or_rendering = not batch_running and (not self.busy or self.operation == "render")
+        self.next_ocr_option.setEnabled(idle_or_rendering)
         if self.switching_session:
             return
-        batch_running = hasattr(self, "batch") and self.batch.running
         count = len(self.batch.items) if hasattr(self, "batch") else 0
         self.documents_button.setVisible(count > 0)
         self.documents_button.setText(f"Documentos ({count})")
-        self.documents_button.setEnabled(not batch_running and self.operation in (None, "render"))
+        self.documents_button.setEnabled(idle_or_rendering)
         self.batch_button.hide()
-        self.batch_action.setEnabled(not self.busy and self.worker.is_alive())
-        self.batch_button.setEnabled(not self.busy and self.worker.is_alive())
+        self.batch_action.setEnabled(idle_or_rendering and self.worker.is_alive())
+        self.batch_button.setEnabled(idle_or_rendering and self.worker.is_alive())
         importing = self.result is None or self.operation == "convert"
         previous = self.content.currentWidget()
         self.content.setCurrentWidget(self.welcome if importing else self.workspace)
@@ -318,13 +319,13 @@ class Window(SessionWindowMixin, QMainWindow):
         filtered_count = len(self.result.filtered_images) if self.result else 0
         self.filtered_button.setVisible(filtered_count > 0)
         self.filtered_button.setText(f"Imagens filtradas ({filtered_count})")
-        self.filtered_button.setEnabled(self.result is not None and self.operation in (None, "render"))
-        navigation = self.result is not None and self.operation in (None, "render") and self.worker.is_alive()
-        self.open_button.setEnabled(not self.busy)
+        self.filtered_button.setEnabled(self.result is not None and idle_or_rendering)
+        navigation = self.result is not None and idle_or_rendering and self.worker.is_alive()
+        self.open_button.setEnabled(idle_or_rendering and self.worker.is_alive())
         self.follow_page.setEnabled(self.result is not None)
-        self.export_button.setEnabled(self.result is not None and not self.busy)
-        self.strip_markers_option.setEnabled(self.result is not None and not self.busy)
-        self.export_options.setEnabled(self.result is not None and not self.busy)
+        self.export_button.setEnabled(navigation)
+        self.strip_markers_option.setEnabled(self.result is not None and idle_or_rendering)
+        self.export_options.setEnabled(self.result is not None and idle_or_rendering)
         self.page_number.setEnabled(navigation)
         current = self.requested_page or 1
         self.pdf_panel.previous.setEnabled(navigation and current > 1)
@@ -378,7 +379,7 @@ class Window(SessionWindowMixin, QMainWindow):
             self._show_batch_dialog(False)
 
     def open_pdf(self):
-        if self.busy or (not self.batch.items and not self.confirm_discard()):
+        if (self.busy and self.operation != "render") or (not self.batch.items and not self.confirm_discard()):
             return
         return_focus = QApplication.focusWidget()
         source, _ = QFileDialog.getOpenFileName(self, "Abrir PDF digital", "", "PDF (*.pdf)")
@@ -750,7 +751,7 @@ class Window(SessionWindowMixin, QMainWindow):
         QMessageBox.critical(self, "Processamento interrompido", "O processo de PDF terminou inesperadamente. Feche e reabra a aplicação.")
 
     def export(self):
-        if self.result is None or self.busy:
+        if self.result is None or not self.export_button.isEnabled():
             return
         vault = QFileDialog.getExistingDirectory(self, "Escolher pasta do vault")
         if not vault:

@@ -38,7 +38,7 @@ class BatchDialog(QDialog):
             self.ocr = CheckBox('OCR automático · texto, tabelas e fórmulas')
             self.ocr.setChecked(window.application.ocrMode == 'auto')
             self.ocr.toggled.connect(lambda enabled: window.application.setOcrMode('auto' if enabled else 'off'))
-            layout.addWidget(self.ocr)
+            layout.addWidget(self.ocr, 0, Qt.AlignmentFlag.AlignLeft)
             self.ocr_status = QLabel(window.application.recognitionStatus)
             self.ocr_status.setWordWrap(True)
             self.ocr_status.setObjectName('muted')
@@ -100,6 +100,7 @@ class BatchDialog(QDialog):
         self.tree.itemDoubleClicked.connect(lambda *_: self.review_current())
         self.batch.progress_changed.connect(self.update_progress)
         self.refresh()
+        (self.add if preparing else self.tree).setFocus()
 
     def update_ocr_status(self):
         self.ocr_status.setText(self.window.application.recognitionStatus)

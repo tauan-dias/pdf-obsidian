@@ -221,9 +221,14 @@ def main():
             window.resize(1024, 700); window.show(); QTest.qWait(100)
             assert window.grab().save(str(args.output / 'widgets-import.png'))
             window.receive_single_document(result)
-            window.render_timer.stop()
             window.pdf_panel.page_view.show_page(bitmap, (0, 0, 595, 842))
             QTest.qWait(100)
+            window.render_timer.stop()
+            window.active_render = window.pending_render = None
+            window.busy, window.operation = False, None
+            window.statusBar().showMessage('Documento convertido. Revise o Markdown antes de salvar.')
+            window.update_controls()
+            app.processEvents()
             assert window.grab().save(str(args.output / 'widgets-editor.png'))
             for name, item in (('batch', BatchDialog(window, preparing=True)),
                                ('filtered', FilteredImagesDialog(window)), ('link', LinkDialog('Texto', window))):

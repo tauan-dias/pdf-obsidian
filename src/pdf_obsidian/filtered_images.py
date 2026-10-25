@@ -2,7 +2,7 @@
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QListWidget,
-                              QListWidgetItem, QLabel, QPushButton, QDialogButtonBox)
+                              QListWidgetItem, QLabel, QPushButton)
 
 from .restoration import restoration_edit
 
@@ -13,7 +13,7 @@ class FilteredImagesDialog(QDialog):
         self.setAutoFillBackground(True)
         self.window = window
         self.setWindowTitle('Imagens filtradas')
-        self.resize(660, 480)
+        self.resize(680, 520)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
@@ -34,7 +34,7 @@ class FilteredImagesDialog(QDialog):
                                       Qt.TransformationMode.SmoothTransformation)
             row = QListWidgetItem(QIcon(thumbnail), f'Página {item.page} — {item.reason}')
             row.setData(Qt.ItemDataRole.UserRole, item)
-            row.setSizeHint(QSize(540, 84))
+            row.setSizeHint(QSize(540, 88))
             self.items.addItem(row)
         layout.addWidget(self.items, 1)
         self.message = QLabel()
@@ -42,16 +42,15 @@ class FilteredImagesDialog(QDialog):
         layout.addWidget(self.message)
         actions = QHBoxLayout()
         self.show_page = QPushButton('Mostrar no PDF')
+        self.close_button = QPushButton('Fechar')
         self.restore = QPushButton('Restaurar imagem')
         self.restore.setObjectName('primary')
         actions.addWidget(self.show_page)
         actions.addStretch()
+        actions.addWidget(self.close_button)
         actions.addWidget(self.restore)
         layout.addLayout(actions)
-        close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        close.button(QDialogButtonBox.StandardButton.Close).setText("Fechar")
-        close.rejected.connect(self.reject)
-        layout.addWidget(close)
+        self.close_button.clicked.connect(self.reject)
         self.show_page.clicked.connect(self.navigate)
         self.restore.clicked.connect(self.restore_current)
         self.items.currentRowChanged.connect(self.refresh)

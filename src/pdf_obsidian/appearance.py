@@ -117,12 +117,13 @@ def apply_theme(window):
         QPushButton {{ background: {c['surface']}; border: 1px solid {c['controlBorder']}; border-radius: 6px; padding: 5px 10px; min-height: 20px; }}
         QToolButton {{ background: transparent; border: 1px solid transparent;
             border-radius: 6px; padding: 5px 8px; min-height: 20px; }}
+        QToolButton::menu-indicator {{ image: none; width: 0; }}
         QPushButton#secondary {{ background: {c['raised']}; border-color: {c['controlBorder']}; }}
         QWidget#toolGroup {{ background: {c['surface']}; border: 1px solid {c['controlBorder']}; border-radius: 6px; }}
         QWidget#editorTools QToolButton {{ padding: 3px; background: transparent; border-color: transparent; }}
         QWidget#editorTools QToolButton:hover {{ background: {c['hover']}; border-color: transparent; }}
         QWidget#editorTools QToolButton:focus {{ border: 2px solid {c['accent']}; }}
-        QWidget#editorTools QToolButton:disabled {{ border-color: {c['border']}; }}
+        QWidget#editorTools QToolButton:disabled {{ border-color: transparent; }}
         QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{ background: {c['raised']};
             border: 1px solid {c['controlBorder']}; border-radius: 6px; padding: 5px 8px; min-height: 20px; }}
         QPushButton:hover, QToolButton:hover {{ background: {c['hover']}; }}
@@ -132,7 +133,7 @@ def apply_theme(window):
         QDoubleSpinBox:focus, QLineEdit:focus, QPlainTextEdit:focus, QTextBrowser:focus,
         QTreeWidget:focus, QListWidget:focus, QCheckBox:focus {{ border: 2px solid {c['accent']}; }}
         QCheckBox:disabled, QLabel:disabled, QPushButton:disabled, QToolButton:disabled {{ color: {c['disabled']}; }}
-        QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; font-weight: 600; padding: 7px 14px; border: 2px solid transparent; }}
+        QPushButton#primary {{ background: {c['accent']}; color: {c['on_accent']}; font-weight: 600; padding: 4px 14px; border: 2px solid transparent; }}
         QPushButton#primary:hover {{ background: {c['accentHover']}; }}
         QPushButton#primary:pressed {{ background: {c['accentPressed']}; }}
         QPushButton#primary:focus {{ background: {c['background']}; color: {c['text']}; border: 2px solid {c['text']}; }}

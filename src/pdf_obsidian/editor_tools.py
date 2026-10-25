@@ -85,7 +85,6 @@ class EditorTools(QWidget):
             ("link", "Link", "Inserir link (Ctrl+K)"),
         ):
             self.add_button(first, command, label, tip)
-        self.add_separator(first)
         self.menus = {}
         for name, entries in (
             ("Listas", (("bullet", "Lista com marcadores"), ("ordered", "Lista numerada"), ("quote", "Citação"))),
@@ -93,7 +92,7 @@ class EditorTools(QWidget):
                 (("left", "Esquerda"), ("center", "Centro"), ("right", "Direita"), ("justify", "Justificar")))),
         ):
             button = QToolButton()
-            button.setText(name)
+            button.setText(name + " ▾")
             button.setAccessibleName(name)
             button.setMinimumHeight(32)
             button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -109,7 +108,6 @@ class EditorTools(QWidget):
             button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
             self.menus[name] = button
             layout.addWidget(button)
-        layout.addStretch()
         self.shortcuts = []
         for keys, command in (("Ctrl+B", "bold"), ("Ctrl+I", "italic"), ("Ctrl+K", "link")):
             shortcut = QShortcut(QKeySequence(keys), editor)
