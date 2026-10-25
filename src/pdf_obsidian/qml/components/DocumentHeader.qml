@@ -68,7 +68,12 @@ Rectangle {
                     SurfaceMenuItem { theme: control.theme; text: "Converter em lote…"; onTriggered: control.backend.newBatch() }
                 }
             }
-            ActionButton { theme: control.theme; text: "Documentos (" + control.backend.documentCount + ")"; onClicked: control.documentsRequested() }
+            ActionButton {
+                objectName: "headerDocumentsAction"
+                theme: control.theme; text: "Documentos (" + control.backend.documentCount + ")"
+                enabled: !control.backend.worker.busy || control.backend.batchRunning
+                onClicked: control.documentsRequested()
+            }
             ActionButton {
                 objectName: "saveAction"
                 implicitWidth: Math.max(control.theme.controlHeight, saveLabelMetrics.advanceWidth + 20)
@@ -77,7 +82,12 @@ Rectangle {
                 enabled: control.backend.editable && control.backend.worker.workerAvailable
                 onClicked: control.backend.exportCurrent()
             }
-            ToolButton { theme: control.theme; iconName: "more"; description: "Opções de exportação"; onClicked: control.optionsRequested() }
+            ToolButton {
+                objectName: "headerOptionsAction"
+                theme: control.theme; iconName: "more"; description: "Opções de exportação"
+                enabled: !control.backend.worker.busy
+                onClicked: control.optionsRequested()
+            }
         }
     }
 }

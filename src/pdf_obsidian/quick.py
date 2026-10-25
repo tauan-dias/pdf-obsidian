@@ -115,7 +115,7 @@ class QuickController(QObject):
         self.batch = self.application.attach_batch(BatchHooks(lambda: True, self.snapshot, self.create_session))
         self.batch.changed.connect(self.batch_changed)
         self.batch.progress_changed.connect(self.changed)
-        self.application.stateChanged.connect(self.changed)
+        self.application.stateChanged.connect(self.state_changed)
         self.application.workerAvailabilityChanged.connect(self.changed)
         self.application.conversionCompleted.connect(self.receive)
         self.application.operationFailed.connect(self.failed)
@@ -296,6 +296,11 @@ class QuickController(QObject):
     def filteredCount(self):
         return len(self.active.result.filtered_images) if self.active else 0
 
+    def state_changed(self):
+        if self.application.operation == 'convert':
+            self._message = ''
+        self.changed.emit()
+
     def notify(self, message):
         self._message = message
         self.changed.emit()
@@ -355,7 +360,7 @@ class QuickController(QObject):
         self.sessions[session.id] = session
         self._texts[session.id] = document.toPlainText()
         document.contentsChanged.connect(lambda: self.document_changed(session))
-        document.modificationChanged.connect(self.changed)
+        document.modificationChanged.connect(self.sync_documents)
         document.undoAvailable.connect(self.changed)
         document.redoAvailable.connect(self.changed)
         self.sync_documents()
@@ -459,12 +464,16 @@ class QuickController(QObject):
             session = item.session
             if session:
                 batch_sessions.add(session.id)
+            status = item.export_status or item.status
+            if session and session.modified and item.export_status in ('Salvo', 'Já salvo'):
+                status += ' · Não salvo'
             rows.append(dict(key=session.id if session else item.id, name=item.source.name,
-                status=item.export_status or item.status, detail=item.message,
+                status=status, detail=item.message,
                 included=item.included, ready=session is not None, external=False))
         for session in self.sessions.values():
             if session.id not in batch_sessions:
-                rows.append(dict(key=session.id, name=session.result.source.name, status='Fora do lote',
+                status = 'Fora do lote · Não salvo' if session.modified else 'Fora do lote · Salvo'
+                rows.append(dict(key=session.id, name=session.result.source.name, status=status,
                     detail='', included=False, ready=True, external=True))
         self.documents.sync(rows)
         self.changed.emit()
@@ -626,7 +635,7 @@ class QuickController(QObject):
     def setStripMarkers(self, value):
         if self.editable and self.active.strip_markers != value:
             self.active.strip_markers = value
-            self.changed.emit()
+            self.sync_documents()
 
     @Slot()
     def shutdown(self):

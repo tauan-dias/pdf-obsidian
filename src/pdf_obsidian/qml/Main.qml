@@ -64,7 +64,7 @@ ApplicationWindow {
         function onDialogRequested(title, message, kind) {
             window.showMessage(title, message, kind);
         }
-        function onLinkRequested(label) { linkLabel.text = label; linkDestination.text = ""; linkDialog.open(); linkDestination.forceActiveFocus(); }
+        function onLinkRequested(label) { linkLabel.text = label; linkDestination.text = ""; linkDialog.open(); (label.length > 0 ? linkDestination : linkLabel).forceActiveFocus(); }
         function onSelectionRequested(anchor, position) {
             // Assign the cursor explicitly, including a collapsed selection.
             editor.cursorPosition = position;
@@ -123,8 +123,8 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+B"; enabled: window.backend.editable && editor.activeFocus; onActivated: window.format("bold") }
     Shortcut { sequence: "Ctrl+I"; enabled: window.backend.editable && editor.activeFocus; onActivated: window.format("italic") }
     Shortcut { sequence: "Ctrl+K"; enabled: window.backend.editable && editor.activeFocus; onActivated: window.format("link") }
-    Shortcut { sequence: "Ctrl+Z"; enabled: window.backend.editable && window.tab === 1; onActivated: window.backend.undo() }
-    Shortcut { sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]; enabled: window.backend.editable && window.tab === 1; onActivated: window.backend.redo() }
+    Shortcut { sequence: "Ctrl+Z"; enabled: window.backend.editable && (window.tab === 1 || !editor.activeFocus); onActivated: window.backend.undo() }
+    Shortcut { sequences: ["Ctrl+Shift+Z", "Ctrl+Y"]; enabled: window.backend.editable && (window.tab === 1 || !editor.activeFocus); onActivated: window.backend.redo() }
 
     ImportPage {
         id: importPage
@@ -162,8 +162,8 @@ ApplicationWindow {
         Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
         Flow {
             Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; Layout.topMargin: 6; Layout.bottomMargin: 6; spacing: 8
-            ToolButton { theme: theme; text: window.pdfVisible ? "Ocultar PDF" : "Mostrar PDF"; onClicked: { window.pdfVisible = !window.pdfVisible; window.saveView(); } }
-            Toggle { theme: theme; text: "Acompanhar página"; checked: window.follow; onToggled: { window.follow = checked; if (checked) window.backend.follow_page(); window.saveView(); } }
+            ToolButton { theme: theme; text: window.pdfVisible ? "Ocultar PDF" : "Mostrar PDF"; enabled: !window.backend.batchRunning; onClicked: { window.pdfVisible = !window.pdfVisible; window.saveView(); } }
+            Toggle { theme: theme; text: "Acompanhar página"; checked: window.follow; enabled: !window.backend.batchRunning; onToggled: { window.follow = checked; if (checked) window.backend.follow_page(); window.saveView(); } }
             ToolButton { theme: theme; iconName: "image"; text: "Imagens filtradas (" + window.backend.filteredCount + ")"; visible: window.backend.filteredCount > 0; enabled: window.backend.editable; onClicked: { window.backend.openFiltered(); filteredDialog.open(); } }
             ToolButton { theme: theme; iconName: "warning"; text: "Avisos (" + window.backend.warnings.length + ")"; selected: window.warningsExpanded; menuIndicator: true; expanded: window.warningsExpanded; visible: window.backend.warnings.length > 0; onClicked: { window.warningsExpanded = !window.warningsExpanded; window.saveView(); } }
         }
@@ -482,7 +482,7 @@ ApplicationWindow {
                     id: pendingRow
                     required property string key
                     required property string name
-                    width: ListView.view.width
+                    width: ListView.view.width - (pendingList.ScrollBar.vertical.size < 0.999 ? 14 : 0)
                     Text { textFormat: Text.PlainText; text: pendingRow.name; color: theme.text; font.pixelSize: theme.bodySize; elide: Text.ElideMiddle; Layout.fillWidth: true }
                     ActionButton { theme: theme; text: "Remover"; compact: true; destructive: true; onClicked: window.backend.removePending(pendingRow.key) }
                 }
@@ -525,14 +525,14 @@ ApplicationWindow {
                     HoverHandler { id: rowHover }
                     Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: theme.border }
                     RowLayout {
-                        anchors.fill: parent; anchors.margins: 10; spacing: 10
+                        anchors.fill: parent; anchors.margins: 10; anchors.rightMargin: documentList.ScrollBar.vertical.size < 0.999 ? 16 : 10; spacing: 10
                         Toggle { theme: theme; text: ""; Accessible.name: "Incluir " + row.name + " na exportação"; checked: row.included; visible: !row.external; enabled: !window.backend.worker.busy && row.ready; onToggled: window.backend.include(row.key, checked) }
                         ColumnLayout {
                             id: rowText; Layout.fillWidth: true; spacing: 3
                             Text { textFormat: Text.PlainText; text: row.name; color: theme.text; font.pixelSize: theme.bodySize; elide: Text.ElideMiddle; Layout.fillWidth: true }
                             StatusLabel {
                                 theme: theme; text: row.status
-                                tone: row.status === "Falhou" ? "danger" : row.status === "Salvo" || row.status === "Já salvo" ? "success" : row.status === "Cancelado" || row.status === "Não executado" || row.status === "Não exportado" ? "warning" : "neutral"
+                                tone: row.status.indexOf("Falhou") >= 0 ? "danger" : (row.status === "Salvo" || row.status === "Já salvo" || row.status.indexOf("· Salvo") >= 0) ? "success" : (row.status.indexOf("Não salvo") >= 0 || row.status === "Cancelado" || row.status === "Não executado" || row.status === "Não exportado") ? "warning" : "neutral"
                             }
                             Text { textFormat: Text.PlainText; visible: row.ready && !row.included && !row.external; text: "Fora da exportação"; color: theme.warning; font.pixelSize: theme.captionSize; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                             Text { textFormat: Text.PlainText; visible: row.detail.length > 0; text: row.detail; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.Wrap; Layout.fillWidth: true }
@@ -568,7 +568,7 @@ ApplicationWindow {
                     required property bool restorable
                     required property string issue
                     Component.onCompleted: window.backend.reviewFiltered(Number(key))
-                    width: ListView.view.width; height: Math.max(theme.mediaRowHeight, filteredText.implicitHeight + theme.listPadding * 2)
+                    width: ListView.view.width - (filteredList.ScrollBar.vertical.size < 0.999 ? 14 : 0); height: Math.max(theme.mediaRowHeight, filteredText.implicitHeight + theme.listPadding * 2)
                     radius: theme.controlRadius; color: theme.raised
                     RowLayout {
                         anchors.fill: parent; anchors.margins: theme.listPadding; spacing: 12
@@ -644,9 +644,9 @@ ApplicationWindow {
             ColumnLayout {
                 id: linkFields; width: linkScroll.availableWidth; spacing: 12
                 Text { textFormat: Text.PlainText; text: "Texto"; color: theme.muted; font.pixelSize: theme.labelSize; font.weight: Font.Medium }
-                Field { id: linkLabel; objectName: "linkLabel"; theme: theme; Layout.fillWidth: true; Accessible.name: "Texto do link" }
+                Field { id: linkLabel; objectName: "linkLabel"; theme: theme; Layout.fillWidth: true; Accessible.name: "Texto do link"; onAccepted: if (linkDestination.text.trim().length > 0) { window.backend.insertLink(linkLabel.text, linkDestination.text); linkDialog.close(); } else linkDestination.forceActiveFocus() }
                 Text { textFormat: Text.PlainText; text: "Destino"; color: theme.muted; font.pixelSize: theme.labelSize; font.weight: Font.Medium }
-                Field { id: linkDestination; objectName: "linkDestination"; theme: theme; Layout.fillWidth: true; Accessible.name: "Destino do link"; placeholderText: "https://… ou caminho relativo" }
+                Field { id: linkDestination; objectName: "linkDestination"; theme: theme; Layout.fillWidth: true; Accessible.name: "Destino do link"; placeholderText: "https://… ou caminho relativo"; onAccepted: if (linkDestination.text.trim().length > 0) { window.backend.insertLink(linkLabel.text, linkDestination.text); linkDialog.close(); } }
             }
         }
         footer: DialogActions {

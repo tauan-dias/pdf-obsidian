@@ -55,7 +55,7 @@ Button {
             control.compact ? "transparent" : control.theme.surface
         border.width: control.visualFocus ? 2 : 1
         border.color: control.activeFocus ? control.theme.accent :
-            !control.enabled ? control.theme.border :
+            !control.enabled ? (control.outlined ? control.theme.border : "transparent") :
             (control.outlined && (control.hovered || control.down)) || control.selected ? control.theme.controlBorderHover :
             control.outlined ? control.theme.controlBorder : "transparent"
         opacity: control.enabled ? 1 : 0.65

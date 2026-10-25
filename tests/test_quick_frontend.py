@@ -1220,3 +1220,106 @@ def test_next_conversion_ocr_option_does_not_modify_current_document(quick,tmp_p
     assert doc.toPlainText()=='Texto original.' and not c.active.modified
     assert c.active.document is doc and not doc.isUndoAvailable()
     QMetaObject.invokeMethod(options,'close')
+
+
+def test_ui_audit_disabled_tool_button_border_and_saving_header_lock(quick, tmp_path, app):
+    from PySide6.QtQml import QQmlExpression, qmlContext
+    from pdf_obsidian.batch import BatchItem
+    c, window, _ = quick
+    res = document(tmp_path)
+    c.receive(res)
+    c.batch.items.append(BatchItem(res.source, status='Concluído', session=c.active))
+    c.sync_documents()
+    app.processEvents()
+    undo_btn = window.findChild(QQuickItem, 'undoAction')
+    docs_btn = window.findChild(QQuickItem, 'headerDocumentsAction')
+    opts_btn = window.findChild(QQuickItem, 'headerOptionsAction')
+    save_btn = window.findChild(QQuickItem, 'saveAction')
+    def border_color(item):
+        bg = item.property('background')
+        return QQmlExpression(qmlContext(item), bg, 'border.color.toString()').evaluate()[0]
+    assert not undo_btn.isEnabled()
+    deadline = time.monotonic() + 1.5
+    while border_color(undo_btn) != '#00000000':
+        QTest.qWait(10)
+        assert time.monotonic() < deadline, border_color(undo_btn)
+    assert docs_btn.isEnabled() and opts_btn.isEnabled()
+    c.application.set_state(True, 'export')
+    app.processEvents()
+    assert not docs_btn.isEnabled()
+    assert not opts_btn.isEnabled()
+    assert not save_btn.isEnabled()
+    deadline = time.monotonic() + 1.5
+    while border_color(save_btn) != '#303030':
+        QTest.qWait(10)
+        assert time.monotonic() < deadline, border_color(save_btn)
+    c.application.set_state(False, '')
+    app.processEvents()
+    assert docs_btn.isEnabled() and opts_btn.isEnabled()
+
+
+def test_ui_audit_import_feedback_cleared_and_hidden_during_conversion(quick, tmp_path, app):
+    c, window, _ = quick
+    feedback = window.findChild(QQuickItem, 'importFeedback')
+    c.notify('Falha anterior na importação.')
+    app.processEvents()
+    assert feedback.isVisible()
+    assert c.application.start_conversion(tmp_path / 'synthetic.pdf')
+    app.processEvents()
+    assert c.message == ''
+    assert not feedback.isVisible()
+
+
+def test_ui_audit_link_dialog_focus_and_enter_submission(quick, tmp_path, app):
+    from PySide6.QtCore import QMetaObject
+    c, window, _ = quick
+    c.receive(document(tmp_path, text='Texto inicial'))
+    window.requestActivate()
+    app.processEvents()
+    label_field = window.findChild(QQuickItem, 'linkLabel')
+    dest_field = window.findChild(QQuickItem, 'linkDestination')
+    c.format('link', None)
+    app.processEvents()
+    assert label_field.hasActiveFocus()
+    label_field.setProperty('text', 'Referência')
+    QTest.keyClick(window, Qt.Key_Return)
+    app.processEvents()
+    assert dest_field.hasActiveFocus()
+    dest_field.setProperty('text', 'https://example.org')
+    QTest.keyClick(window, Qt.Key_Return)
+    app.processEvents()
+    assert '[Referência](<https://example.org>)' in c.active.document.toPlainText()
+    c.selectionRequested.emit(0, 5)
+    app.processEvents()
+    c.format('link', None)
+    app.processEvents()
+    assert dest_field.hasActiveFocus()
+    QMetaObject.invokeMethod(window.findChild(QObject, 'linkDialog'), 'close')
+
+
+def test_ui_audit_undo_redo_shortcuts_from_non_editor_focus_and_document_dirty_badge(quick, tmp_path, app):
+    from pdf_obsidian.batch import BatchItem
+    c, window, _ = quick
+    res = document(tmp_path, text='Texto base')
+    c.receive(res)
+    window.requestActivate()
+    c.batch.items.append(BatchItem(res.source, status='Concluído', session=c.active, export_status='Salvo'))
+    c.active.document.setModified(False)
+    c.sync_documents()
+    assert c.documents.rows[0]['status'] == 'Salvo'
+    c.format('bold', None)
+    app.processEvents()
+    assert '**' in c.active.document.toPlainText()
+    assert c.documents.rows[0]['status'] == 'Salvo · Não salvo'
+    bold_btn = window.findChild(QQuickItem, 'boldAction')
+    bold_btn.forceActiveFocus()
+    app.processEvents()
+    assert bold_btn.hasActiveFocus() and not c.editor.hasActiveFocus()
+    QTest.keyClick(window, Qt.Key_Z, Qt.ControlModifier)
+    app.processEvents()
+    assert c.active.document.toPlainText() == 'Texto base'
+    assert c.documents.rows[0]['status'] == 'Salvo'
+    QTest.keyClick(window, Qt.Key_Y, Qt.ControlModifier)
+    app.processEvents()
+    assert '**' in c.active.document.toPlainText()
+    assert c.documents.rows[0]['status'] == 'Salvo · Não salvo'

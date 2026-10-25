@@ -246,7 +246,7 @@ FocusScope {
                     Text {
                         textFormat: Text.PlainText
                         objectName: "importFeedback"
-                        visible: window.feedback.length > 0
+                        visible: window.feedback.length > 0 && !window.converting
                         text: window.feedback
                         color: tokens.muted
                         font.family: tokens.fontFamily
