@@ -50,6 +50,6 @@ A checagem carrega a cena e verifica Tab, Espaço, Ctrl+O, clique, desabilitado 
 
 A [captura compacta](preview-compact.png) usa 640 × 600 e texto ampliado em 25%. Em alturas pequenas o conteúdo central pode rolar; cabeçalho e rodapé permanecem disponíveis.
 
-Validação da entrega original do protótipo: **230 testes existentes passaram em 49,85 s**; hashes de **46 arquivos preexistentes** conferidos, sem alterações nessa entrega. A validação da extração posterior da fachada consta em `VALIDATION.md`, na raiz do projeto.
+Validação da entrega original do protótipo: **230 testes existentes passaram em 49,85 s**; hashes de **46 arquivos preexistentes** conferidos, sem alterações nessa entrega. Os registros detalhados das etapas posteriores são mantidos no checkout de desenvolvimento.
 
 A avaliação técnica e o plano estão em [MIGRATION.md](MIGRATION.md).

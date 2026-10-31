@@ -75,4 +75,4 @@ Arquivos de sondagem, páginas renderizadas e `ocr/runtime.log` ficam no workspa
 .venv/bin/python tools/benchmark_quick.py --pages 100
 ```
 
-Testes comuns usam um diretório de OCR vazio para não carregar modelos implicitamente; os testes específicos usam contratos e processos controláveis. O benchmark usa o worker real, gera PDFs próprios e exige modelos preparados. Nunca usar o PDF pessoal da raiz nem um vault real. Evidências de qualidade, memória, cancelamento e Python 3.12/3.14 estão em `VALIDATION.md`.
+Testes comuns usam um diretório de OCR vazio para não carregar modelos implicitamente; os testes específicos usam contratos e processos controláveis. O benchmark usa o worker real, gera PDFs próprios e exige modelos preparados. Use apenas PDFs sintéticos nos testes. Registros detalhados de validações anteriores são mantidos no checkout de desenvolvimento e não fazem parte da documentação pública.

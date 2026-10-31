@@ -41,7 +41,7 @@ Inspeção direta de amostras: importação e editor na menor janela com fonte a
 
 ## Validação e desempenho
 
-Resultados finais e comandos estão em `VALIDATION.md`. A primeira execução encontrou uma falha preexistente no manifesto da licença (378 passaram, um falhou); ela foi investigada e corrigida sem afrouxar o teste. A regressão impede publicação com links simbólicos e verifica preservação do PDF e do arquivo externo. Casos OCR usam modelos sintéticos e subprocessos controlados.
+Os resultados detalhados e históricos das verificações são mantidos no checkout de desenvolvimento. A primeira execução encontrou uma falha preexistente no manifesto da licença (378 passaram, um falhou); ela foi investigada e corrigida sem afrouxar o teste. A regressão impede publicação com links simbólicos e verifica preservação do PDF e do arquivo externo. Casos OCR usam modelos sintéticos e subprocessos controlados.
 
 Benchmark real com PDF gerado de 100 páginas e 200.718 caracteres: conversão/transporte 7,148 s, entrega ao primeiro frame 0,824 s, total até PDF visível 8,179 s, software/offscreen. Não houve comparação controlada antes/depois; não se alega otimização de desempenho. Nenhuma dependência de execução foi adicionada. O ambiente virtual ausente foi recriado com as versões fixadas do projeto.
 

@@ -63,4 +63,4 @@ Em **Opções**, “Reduzir movimento” desativa transições e movimento de ca
 
 A inspeção visual gera documentos e workspaces temporários próprios, além de capturas em três tamanhos e duas escalas de fonte. Progresso e falhas são fixtures de apresentação, não execuções reais desses estados; integração com worker é coberta pela suíte e pelo benchmark. Nunca usar o PDF pessoal da raiz ou vaults reais para esse procedimento.
 
-Capturas offscreen não substituem aceite interativo em desktop/GPU, IME ou leitor de tela. Evidências e limitações estão em `VALIDATION.md`.
+Capturas offscreen não substituem aceite interativo em desktop/GPU, IME ou leitor de tela. Os registros detalhados de validação são mantidos no checkout de desenvolvimento.

@@ -76,14 +76,14 @@ Com o extra de desenvolvimento instalado:
 .venv/bin/python -m pytest -q
 ```
 
-Os testes criam PDFs sintéticos e não dependem do PDF pessoal do usuário. Ferramentas de revisão visual e benchmarks também geram entradas próprias; consulte [VALIDATION.md](VALIDATION.md) para resultados registrados e limitações ainda pendentes.
+Os testes criam PDFs sintéticos e não dependem de documentos pessoais. Ferramentas de revisão visual e benchmarks também geram suas próprias entradas. O relatório [PUBLICATION_AUDIT.md](PUBLICATION_AUDIT.md) registra as verificações desta preparação e as limitações pendentes.
 
 ## Limitações conhecidas
 
 - A reconstrução de títulos, listas, figuras e ordem de leitura usa heurísticas; documentos com múltiplas colunas precisam de revisão.
 - OCR pode errar texto, tabelas ou fórmulas. As imagens originais são mantidas para comparação; confira o resultado antes de exportar.
 - A prévia Qt pode exibir LaTeX como código. Confira a apresentação final no Obsidian.
-- Compatibilidade visual com Obsidian desktop e Android, GPU, leitores de tela e diferentes ambientes Linux depende de validação manual, registrada em [VALIDATION.md](VALIDATION.md).
+- Compatibilidade visual com Obsidian desktop e Android, GPU, leitores de tela e diferentes ambientes Linux ainda depende de validação manual.
 - O aplicativo não implementa sincronização com vaults.
 
 ## Documentação adicional
@@ -91,7 +91,7 @@ Os testes criam PDFs sintéticos e não dependem do PDF pessoal do usuário. Fer
 - [OCR.md](OCR.md): preparação, funcionamento offline, consumo e limites do OCR.
 - [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md): componentes e recursos visuais.
 - [AUDIT.md](AUDIT.md): auditoria funcional e recomendações de produto.
-- [VALIDATION.md](VALIDATION.md): verificações registradas e aceites manuais pendentes.
+- [PUBLICATION_AUDIT.md](PUBLICATION_AUDIT.md): verificações desta preparação e pendências para publicação.
 
 ## Contribuições e licença
 

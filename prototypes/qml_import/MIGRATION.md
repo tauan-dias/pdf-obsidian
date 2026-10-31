@@ -41,7 +41,7 @@ Ambiente verificado: PySide6 **6.10.2**. `QtQuick`, `QtQuickControls2`, `QQuickT
 
 A validação usa uma conversão real em subprocesso com `QCoreApplication`, sem importar `PySide6.QtWidgets`, e um componente QML mínimo com bindings para as propriedades da fachada. Objetos fornecidos ao QML precisam de propriedade/tempo de vida explícitos; o teste conserva o controlador no Python e destrói o consumidor QML antes dele.
 
-Validação da extração: **239 testes passaram em 51,01 s**, incluindo nove casos novos de fachada; o `--check` do protótipo também passou. Consulte `VALIDATION.md` na raiz.
+Validação da extração: **239 testes passaram em 51,01 s**, incluindo nove casos novos de fachada; o `--check` do protótipo também passou. Os registros detalhados das etapas posteriores são mantidos no checkout de desenvolvimento.
 
 A etapa seguinte de importação/progresso foi concluída conforme a seção abaixo.
 
@@ -57,7 +57,7 @@ A página QML não declara um segundo Ctrl+O: o atalho pertence à janela. A fon
 
 A renderização padrão do Qt é preservada; `QT_QUICK_BACKEND=software` é uma alternativa de execução. Capturas e testes automatizados usam software/offscreen. Isso não representa validação de GPU, Wayland/X11, leitor de tela ou desempenho em hardware real. A exportação continua manual, após revisão.
 
-Validação final da integração: **250 testes passaram em 57,73 s**, lint QML e checagens do protótipo sem avisos; recursos QML conferidos no wheel e página carregada fora do checkout. Detalhes em `VALIDATION.md`.
+Validação final da integração: **250 testes passaram em 57,73 s**, lint QML e checagens do protótipo sem avisos; recursos QML conferidos no wheel e página carregada fora do checkout. Os registros detalhados são mantidos no checkout de desenvolvimento.
 
 Próxima etapa do plano: modelo de documentos e fluxo de lote em QML, seguido das provas técnicas de PDF e editor.
 

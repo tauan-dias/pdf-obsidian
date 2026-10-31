@@ -12,7 +12,7 @@ Implementados: largura e organização do link Widgets; foco contrastante dos pr
 
 Mantidos após avaliação: tamanhos dos títulos da prévia, que continuam distinguindo a hierarquia do documento; mensagem completa sobre indisponibilidade/preparação do OCR. O ganho de área foi obtido nos controles, sem reduzir a tipografia do documento. Não houve motivo suficiente para alterar o renderizador da prévia ou introduzir outra propriedade de estado OCR para um refinamento textual.
 
-As alterações preexistentes no checkout foram preservadas. Especificação atualizada em `DESIGN_SYSTEM.md`; validações desta implementação em `VALIDATION.md`.
+As alterações preexistentes no checkout foram preservadas. Especificação atualizada em `DESIGN_SYSTEM.md`; os registros detalhados de validação desta implementação são mantidos no checkout de desenvolvimento.
 
 ## Evidência e abrangência
 
@@ -104,4 +104,4 @@ Para cada conjunto implementado, comparar capturas nos três tamanhos já utiliz
 
 Critérios: nenhuma ação cortada, nenhum controle sobreposto, foco visível em fundo claro e escuro, cores dos documentos intactas, sem redução forçada da fonte ou remoção de comandos para caber. Desktop, leitor de tela, IME e seletores nativos exigem validação própria.
 
-Na entrega inicial foi criado somente este documento de análise. A implementação posterior foi conferida com capturas novas, testes de interface e suíte completa; resultados e limitações estão em `VALIDATION.md`.
+Na entrega inicial foi criado somente este documento de análise. A implementação posterior foi conferida com capturas novas, testes de interface e suíte completa; os resultados detalhados permanecem no checkout de desenvolvimento.

@@ -56,7 +56,7 @@ Não há credencial identificada que exija rotação. Se uma revisão posterior 
 | Bandit / Ruff | Não executados: ferramentas indisponíveis |
 | Validação visual manual | Não realizada nesta auditoria |
 
-Nenhum pacote foi instalado. Os resultados históricos em `VALIDATION.md` descrevem outras execuções e não foram tratados como validação deste estado.
+Nenhum pacote foi instalado. Registros históricos detalhados de validação permanecem no checkout de desenvolvimento e não foram tratados como validação deste estado.
 
 ## Pendências
 
