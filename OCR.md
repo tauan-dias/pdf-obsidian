@@ -7,7 +7,8 @@ O modo **OCR automático** complementa a extração direta nas novas conversões
 A instalação completa tem duas etapas, ambas explícitas:
 
 ```bash
-.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/python -m pip install --require-hashes --only-binary=:all: -r requirements.lock
+.venv/bin/python -m pip install --no-deps -e .
 .venv/bin/pdf-obsidian-prepare-ocr
 ```
 
@@ -35,7 +36,7 @@ A preparação também aceita um repositório local completo de wheels e uma pas
   --model-source /caminho/modelos-preparados
 ```
 
-`--offline` exige ambos os caminhos e usa `pip --no-index`. Não é um instalador portátil: a preparação utiliza o Python do ambiente da aplicação. Dependências estão fixadas em `ocr_requirements.txt`; commits dos modelos em `ocr_models.json`; cada arquivo preparado recebe SHA-256 no manifesto local. Licenças Apache-2.0 e CDLA-Permissive-2.0 acompanham os modelos. Pesos não entram em commits.
+`--offline` exige ambos os caminhos e usa `pip --no-index`. Não é um instalador portátil: a preparação utiliza o Python do ambiente da aplicação. Dependências e hashes aprovados de wheels estão fixados em `ocr_requirements.lock` (pins legíveis em `ocr_requirements.txt`); a instalação exige hashes e somente binários, inclusive no modo offline. Commits dos modelos estão em `ocr_models.json`; SHA-256 esperados, inclusive do RapidOCR, em `ocr_trusted_models.json`, distribuído com a aplicação. O manifesto local deve coincidir com esse conjunto e todos os arquivos são verificados antes do uso. Alterar pesos e reescrever o manifesto local não autoriza um modelo diferente. A preparação deve usar uma pasta limpa se houver arquivos de modelos extras. Os hashes pressupõem confiança na distribuição da aplicação e não são assinatura contra um invasor com controle do mesmo usuário. Licenças Apache-2.0 e CDLA-Permissive-2.0 acompanham os modelos. Pesos não entram em commits.
 
 ## Uso
 
@@ -61,9 +62,13 @@ Manuscritos, tradução, interpretação de gráficos e um novo renderizador mat
 
 ## Execução, recuperação e auditoria
 
-Docling, RapidOCR/ONNX, TableFormer em modo rápido e CodeFormulaV2 executam em um subprocesso de CPU, separado da interface e do worker PDF. Há uma página em processamento por vez, com reutilização dos modelos durante o documento. O motor bloqueia conexões IP e usa somente arquivos locais; plugins externos e serviços remotos ficam desativados.
+Docling, RapidOCR/ONNX, TableFormer em modo rápido e CodeFormulaV2 executam em um subprocesso de CPU, separado da interface e do worker PDF. Há uma página em processamento por vez, com reutilização dos modelos durante o documento. O auxiliar aplica seccomp no kernel antes de carregar o motor: bloqueia criação de sockets IP, conexões inclusive Unix para serviços externos ao processo e inspeção de outros processos. Landlock limita leitura a bibliotecas do sistema, pacote da aplicação, recursos OCR e informações locais necessárias do kernel; escrita fica no workspace OCR, cache e `/dev/null`. Credenciais e variáveis arbitrárias do ambiente não são herdadas. Plugins externos e serviços remotos ficam desativados. Isso exige Linux x86_64/aarch64 com Landlock ABI 3+ habilitado (Linux 6.2+ normalmente) e `libseccomp.so.2`; falta de suporte interrompe o reconhecimento com preservação da conversão direta, sem fallback desprotegido.
 
-O timeout é de 180 segundos por página e o orçamento do subprocesso é de 4 GiB de memória residente. Falha de reconhecimento, recursos corrompidos, resposta inválida, timeout ou excesso de memória preservam a conversão direta e as imagens. Cancelar encerra o subprocesso, sem precisar encerrar o worker principal. No Linux, a morte inesperada do worker também encerra o auxiliar.
+O timeout é de 180 segundos por página e o orçamento do subprocesso e seus eventuais descendentes é de 4 GiB de memória residente. Falha de reconhecimento, recursos corrompidos, resposta inválida, timeout ou excesso de memória preservam a conversão direta e as imagens. Cancelar encerra o subprocesso, sem precisar encerrar o worker principal. No Linux, a morte inesperada do worker também encerra o auxiliar.
+
+O worker PDF também bloqueia conexões no kernel. Um supervisor externo ao processo limita RSS do worker a 2 GiB, arquivos da sessão a 2 GiB e tempo por comando a uma hora (30 segundos para renderização). Há limite de CPU de 300 segundos por comando e de 256 MiB por arquivo escrito; rasterizações grandes são recusadas antes de alocar mais de 24 milhões de pixels. RSS e disco são monitorados periodicamente, podendo ter picos entre verificações; não equivalem a quotas de cgroup. Ao exceder o orçamento, o processamento para e o controlador preserva documentos concluídos e arquivos temporários até a confirmação de fechamento. Texto editado deve ser copiado/salvo antes de reabrir a aplicação; não há persistência automática de sessão. PDFs que exigem arquivos de saída acima do limite podem ser recusados. Os limites não modificam o original nem os filtros de imagens.
+
+A prévia aceita apenas PNGs regulares dentro de `assets/`, sem symlinks, com até 64 MiB de dados e 24 milhões de pixels. URLs remotas, referências externas e arquivos especiais são recusados. O Markdown editável e exportado mantém seus links: essa restrição de visualização não é sanitização para todos os consumidores externos.
 
 Arquivos de sondagem, páginas renderizadas e `ocr/runtime.log` ficam no workspace temporário da conversão para diagnóstico e recuperação durante a sessão. Não são anexos exportados. `conversao.json` recebe a seção opcional `recognition` com modo, idiomas, versões/commits, resultados por página, durações e pico observado. Essa auditoria participa da assinatura de publicação; repetição do mesmo resultado continua reutilizando a saída intacta sem sobrescrevê-la.
 

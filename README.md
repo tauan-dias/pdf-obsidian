@@ -11,6 +11,8 @@ O PDF-Obsidian ajuda a transformar apostilas e documentos de estudo em notas edi
 - Conversão de PDFs em Markdown, com imagens e recortes preservados como anexos.
 - OCR local opcional para português e inglês, tabelas e fórmulas, sem substituir silenciosamente texto nativo.
 - Revisão lado a lado do PDF e Markdown, com prévia, navegação por página, zoom e recortes.
+- Tabelas digitais com bordas em Markdown/HTML, com recortes preservados para conferência.
+- Revisão guiada dos avisos, com marcação reversível durante a sessão.
 - Revisão e restauração individual de imagens recorrentes filtradas nas margens; a remoção de outras imagens é manual.
 - Conversão e exportação em lote, sem gravar no vault até a confirmação do usuário.
 - Edição com desfazer/refazer e publicação sem sobrescrever arquivos existentes.
@@ -40,7 +42,8 @@ Crie e ative um ambiente virtual, instale o projeto e inicie o aplicativo:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e '.[dev]'
+python -m pip install --require-hashes --only-binary=:all: -r requirements.lock
+python -m pip install --no-deps -e .
 pdf-obsidian
 ```
 
@@ -70,13 +73,19 @@ pdf-obsidian --widgets
 
 ## Testes e validação
 
-Com o extra de desenvolvimento instalado:
+Para desenvolvimento, instale também o extra de testes (`python -m pip install -e '.[dev]'`). Com ele instalado:
 
 ```bash
 .venv/bin/python -m pytest -q
 ```
 
-Os testes criam PDFs sintéticos e não dependem de documentos pessoais. Ferramentas de revisão visual e benchmarks também geram suas próprias entradas. O relatório [PUBLICATION_AUDIT.md](PUBLICATION_AUDIT.md) registra as verificações desta preparação e as limitações pendentes.
+Os testes criam PDFs sintéticos e não dependem de documentos pessoais. Ferramentas de revisão visual e benchmarks também geram suas próprias entradas.
+
+## Segurança local
+
+O processamento PDF tem limites de pixels, memória, CPU, tempo e arquivos. A prévia carrega somente PNGs da pasta de anexos da sessão. O worker exige `libseccomp.so.2` (pacote de sistema `libseccomp` ou `libseccomp2`). O OCR também exige Linux x86_64/aarch64 com Landlock ABI 3+; sem essas proteções, o reconhecimento falha e preserva texto nativo e imagens. Consulte [OCR.md](OCR.md) para os limites e [SECURITY.md](SECURITY.md) para os controles e limites de segurança.
+
+`requirements.lock` fixa os wheels das dependências principais, incluindo transitivas do PyMuPDF 2.0, cuja atualização corrige CVE-2026-82035. O lock foi resolvido em Linux/Python 3.14; outras plataformas devem validar a disponibilidade de wheels. A instalação do código local continua exigindo confiança no checkout e no backend de build.
 
 ## Limitações conhecidas
 
@@ -90,8 +99,6 @@ Os testes criam PDFs sintéticos e não dependem de documentos pessoais. Ferrame
 
 - [OCR.md](OCR.md): preparação, funcionamento offline, consumo e limites do OCR.
 - [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md): componentes e recursos visuais.
-- [AUDIT.md](AUDIT.md): auditoria funcional e recomendações de produto.
-- [PUBLICATION_AUDIT.md](PUBLICATION_AUDIT.md): verificações desta preparação e pendências para publicação.
 
 ## Contribuições e licença
 
