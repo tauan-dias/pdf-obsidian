@@ -69,7 +69,7 @@ def resource_status(root=None, *, require_environment=True):
             raise ValueError('Modelo incompleto')
         return True, 'OCR local pronto · português e inglês', manifest
     except (OSError, ValueError, TypeError):
-        return False, 'OCR indisponível. A conversão preserva texto nativo e imagens. Para preparar ou reparar, execute pdf-obsidian-prepare-ocr.', {}
+        return False, 'OCR indisponível. A conversão preserva texto nativo e imagens. Use Preparar OCR na interface para baixar e verificar os recursos. A preparação requer internet e cerca de 3 GB em disco.', {}
 
 
 def verify_resources(root, check=None, *, require_environment=True):

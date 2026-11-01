@@ -70,3 +70,29 @@ def test_conversion_crop_and_export_through_gui(app, tmp_path, monkeypatch):
         assert not errors
     finally:
         window.close()
+
+
+def test_ocr_controls_require_prepared_resources(app, monkeypatch):
+    from pdf_obsidian.batch_dialog import BatchDialog
+    from pdf_obsidian.import_panel import LegacyImportPage
+    window = Window()
+    batch = BatchDialog(window, preparing=True)
+    fallback = LegacyImportPage(window.welcome)
+    try:
+        fallback.update_state(window.welcome.state)
+        for control in (window.next_ocr_option, batch.ocr, fallback.ocr):
+            assert not control.isChecked() and not control.isEnabledTo(control.parentWidget())
+        monkeypatch.setattr('pdf_obsidian.application.resource_status', lambda: (True, 'OCR local pronto', {}))
+        window.application.ocr_setup.changed.emit()
+        fallback.update_state(window.welcome.state)
+        for control in (window.next_ocr_option, batch.ocr, fallback.ocr):
+            assert not control.isChecked() and control.isEnabledTo(control.parentWidget())
+        batch.ocr.click()
+        fallback.update_state(window.welcome.state)
+        assert window.application.ocrMode == 'auto'
+        assert all(control.isChecked() for control in (window.next_ocr_option, batch.ocr, fallback.ocr))
+    finally:
+        batch.close()
+        fallback.close()
+        window.close()
+        app.processEvents()

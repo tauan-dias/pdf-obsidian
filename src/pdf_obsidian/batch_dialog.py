@@ -43,6 +43,10 @@ class BatchDialog(QDialog):
             self.ocr_status.setWordWrap(True)
             self.ocr_status.setObjectName('muted')
             layout.addWidget(self.ocr_status)
+            self.prepare_ocr = QPushButton('Preparar OCR · baixar recursos')
+            self.prepare_ocr.clicked.connect(window._prepare_ocr)
+            layout.addWidget(self.prepare_ocr)
+            self.update_ocr_status()
             window.application.conversionOptionsChanged.connect(self.update_ocr_status)
         self.tree = QTreeWidget()
         self.tree.setAccessibleName("Documentos e estados da conversão")
@@ -103,7 +107,15 @@ class BatchDialog(QDialog):
         (self.add if preparing else self.tree).setFocus()
 
     def update_ocr_status(self):
+        self.ocr.blockSignals(True)
+        self.ocr.setChecked(self.window.application.ocrMode == 'auto')
+        self.ocr.blockSignals(False)
+        self.ocr.setEnabled(not self.window.application.busy and self.window.application.ocrAvailable)
         self.ocr_status.setText(self.window.application.recognitionStatus)
+        self.prepare_ocr.setVisible(not self.window.application.ocrAvailable)
+        self.prepare_ocr.setText('Cancelar preparação do OCR' if self.window.application.ocrPreparing else 'Preparar OCR · baixar recursos')
+        if hasattr(self, 'start'):
+            self.refresh_controls()
 
     def add_files(self):
         paths, _ = QFileDialog.getOpenFileNames(self, 'Adicionar PDFs ao lote', '', 'PDF (*.pdf *.PDF)')
@@ -242,7 +254,7 @@ class BatchDialog(QDialog):
         self.description.setText(description)
         self.add.setVisible(self.preparing)
         self.start.setVisible(self.preparing)
-        self.start.setEnabled(bool(self.paths) and not self.window.busy)
+        self.start.setEnabled(bool(self.paths) and not self.window.busy and not self.window.application.ocrPreparing)
         self.add.setEnabled(not running)
         self.remove.setText('Remover da lista' if self.preparing else 'Excluir da exportação')
         self.remove.setEnabled(not running and bool(self.current_id()))

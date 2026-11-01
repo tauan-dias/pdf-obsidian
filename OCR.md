@@ -4,7 +4,11 @@ O modo **OCR automático** complementa a extração direta nas novas conversões
 
 ## Preparação
 
-A instalação completa tem duas etapas, ambas explícitas:
+Após instalar a aplicação, use **Preparar OCR · baixar recursos** na importação, no lote ou em **Opções**. A preparação requer internet e aproximadamente 3 GB em disco (mais espaço temporário para downloads). A interface mostra a etapa atual e permite cancelar. Ao concluir, o OCR fica disponível nas próximas conversões sem reiniciar. Nenhum PDF é enviado; após essa etapa, o reconhecimento é offline.
+
+Em caso de falha, a interface mostra o caminho do log temporário e permite tentar novamente. Cancelar ou fechar a aplicação encerra também os subprocessos de instalação. Recursos e caches já baixados são mantidos para uma nova tentativa; novas conversões aguardam o fim da preparação. Documentos abertos e edições são preservados.
+
+Alternativamente, prepare pelo terminal:
 
 ```bash
 .venv/bin/python -m pip install --require-hashes --only-binary=:all: -r requirements.lock
@@ -12,7 +16,7 @@ A instalação completa tem duas etapas, ambas explícitas:
 .venv/bin/pdf-obsidian-prepare-ocr
 ```
 
-Alternativa equivalente ao segundo comando:
+Alternativa equivalente ao último comando:
 
 ```bash
 .venv/bin/python -m pdf_obsidian.prepare_ocr
@@ -20,7 +24,7 @@ Alternativa equivalente ao segundo comando:
 
 A preparação instala dependências de CPU em um ambiente separado e baixa os modelos oficiais. Não exige instalar Tesseract. Os arquivos ficam por padrão em `.venv/share/pdf-obsidian/ocr/`, fora do código-fonte e do pacote leve da interface. Há aproximadamente 1,1 GiB de modelos e 1,7 GiB de ambiente instalado nesta configuração; tamanho do download e do disco podem variar com a plataforma.
 
-Para escolher outra pasta, use `--directory CAMINHO` na preparação e defina `PDF_OBSIDIAN_OCR_DIR=CAMINHO` ao abrir a aplicação. A pasta deve conter o ambiente e o manifesto produzidos pelo preparador. Reinicie uma janela já aberta depois de preparar os modelos.
+Para escolher outra pasta, use `--directory CAMINHO` na preparação e defina `PDF_OBSIDIAN_OCR_DIR=CAMINHO` ao abrir a aplicação. A pasta deve conter o ambiente e o manifesto produzidos pelo preparador. A preparação pela interface respeita essa variável.
 
 Verificação sem rede:
 
@@ -41,7 +45,7 @@ A preparação também aceita um repositório local completo de wheels e uma pas
 ## Uso
 
 - Na importação, na preparação do lote ou em **Opções → OCR automático nas próximas conversões**, mantenha **OCR automático · texto, tabelas e fórmulas** marcado. Desmarcar mantém a conversão anterior, sem carregar modelos.
-- O estado informa se o OCR está preparado. Sem recursos, a conversão continua com extração direta e imagens, registrando avisos nas páginas candidatas.
+- O estado informa se o OCR está preparado. Sem recursos ou durante a preparação, a opção fica desmarcada e desabilitada; as novas conversões disponíveis usam extração direta e imagens. Após preparar, marque a opção para ativar o reconhecimento.
 - A escolha vale para o trabalho iniciado e para todos os documentos daquele lote. Não pode ser alterada durante o processamento e não modifica opções de documentos já convertidos.
 - O progresso informa a página e a etapa real. A primeira página envolve carregar os modelos e pode ser sensivelmente mais lenta que as seguintes.
 - Confira os avisos por página antes de salvar no vault. Resultados automáticos podem conter erros; as imagens são mantidas para comparação e remoção manual pela prévia.

@@ -20,9 +20,12 @@ FocusScope {
     property int progressCurrent: 0
     property int progressTotal: 0
     property string feedback: ""
-    property string ocrMode: "auto"
+    property string ocrMode: "off"
     property string ocrStatus: "OCR local · português e inglês"
     property string conversionStage: ""
+    property bool ocrPreparing: false
+    property bool ocrAvailable: false
+    signal prepareOcrRequested()
     signal ocrModeRequested(bool enabled)
     signal openPdfRequested()
     signal batchRequested()
@@ -147,7 +150,7 @@ FocusScope {
                             objectName: "ocrModeAction"
                             theme: tokens; text: "OCR automático · texto, tabelas e fórmulas"
                             Layout.fillWidth: true
-                            checked: window.ocrMode === "auto"; enabled: window.canImport
+                            checked: window.ocrAvailable && window.ocrMode === "auto"; enabled: window.canImport && window.ocrAvailable
                             onToggled: window.ocrModeRequested(checked)
                         }
                         Text {
@@ -155,6 +158,14 @@ FocusScope {
                             color: tokens.muted; font.family: tokens.fontFamily; font.pixelSize: tokens.captionSize
                             Layout.fillWidth: true; wrapMode: Text.WordWrap
                         }
+                    }
+                    ActionButton {
+                        objectName: "prepareOcrAction"
+                        theme: tokens
+                        text: window.ocrPreparing ? "Cancelar preparação do OCR" : "Preparar OCR · baixar recursos"
+                        visible: !window.converting && (!window.ocrAvailable || window.ocrPreparing)
+                        enabled: window.canImport || window.ocrPreparing
+                        onClicked: window.prepareOcrRequested()
                     }
                     Rectangle {
                         Layout.fillWidth: true

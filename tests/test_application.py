@@ -79,18 +79,24 @@ def test_local_url_progress_and_result_handoff(controller, tmp_path):
     assert progress == [(3, 10)]
 
 
-def test_recognition_status_tracks_mode_without_changing_active_work(controller):
+def test_recognition_status_tracks_mode_without_changing_active_work(controller, monkeypatch):
     updates = []
     controller.conversionOptionsChanged.connect(lambda: updates.append(controller.recognitionStatus))
     assert 'OCR indisponível' in controller.recognitionStatus
+    assert controller.ocrMode == 'off' and not controller.ocrAvailable
+    controller.setOcrMode('auto')
+    assert controller.ocrMode == 'off' and not updates
+    monkeypatch.setattr('pdf_obsidian.application.resource_status', lambda: (True, 'OCR local pronto', {}))
+    controller.setOcrMode('auto')
+    assert controller.ocrMode == 'auto' and updates == ['OCR local pronto']
     controller.setOcrMode('off')
-    assert updates == ['OCR desligado. Apenas texto nativo e imagens serão extraídos.']
+    assert updates[-1] == 'OCR desligado. Apenas texto nativo e imagens serão extraídos.'
     controller.set_state(True, 'convert')
     controller.setOcrMode('auto')
-    assert controller.ocrMode == 'off' and len(updates) == 1
+    assert controller.ocrMode == 'off' and len(updates) == 2
     controller.set_state(False, '')
     controller.setOcrMode('auto')
-    assert 'OCR indisponível' in updates[-1]
+    assert controller.ocrMode == 'auto' and updates[-1] == 'OCR local pronto'
 
 
 @pytest.mark.parametrize('event,signal', [('cancelled', 'conversionCancelled'), ('error', 'operationFailed')])

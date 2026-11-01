@@ -64,7 +64,7 @@ class BatchController(QObject):
         return self.mode is not None
 
     def start(self, paths):
-        if self.application.busy or not self.application.workerAvailable:
+        if self.application.busy or self.application.ocrPreparing or not self.application.workerAvailable:
             return False
         sources = list(dict.fromkeys(Path(path).resolve() for path in paths))
         if not sources or not self.hooks.prepare_start():

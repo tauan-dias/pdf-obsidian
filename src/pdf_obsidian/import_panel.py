@@ -28,13 +28,16 @@ class LegacyImportPage(QWidget):
         description.setAlignment(Qt.AlignCenter)
         layout.addWidget(description)
         self.ocr = CheckBox('OCR automático · texto, tabelas e fórmulas')
-        self.ocr.setChecked(True)
+        self.ocr.setChecked(False)
         self.ocr.toggled.connect(panel.ocrModeRequested)
         layout.addWidget(self.ocr)
         self.ocr_status = QLabel()
         self.ocr_status.setWordWrap(True)
         self.ocr_status.setObjectName('muted')
         layout.addWidget(self.ocr_status)
+        self.prepare_ocr = QPushButton('Preparar OCR · baixar recursos')
+        self.prepare_ocr.clicked.connect(panel.prepareOcrRequested)
+        layout.addWidget(self.prepare_ocr)
         self.open_button = QPushButton('Abrir PDF')
         self.open_button.setObjectName('primary')
         self.open_button.setIcon(tool_icon('open', COLORS['on_accent']))
@@ -63,12 +66,15 @@ class LegacyImportPage(QWidget):
         for widget in (self.source, self.progress, self.stage, self.cancel):
             widget.setVisible(converting)
         self.ocr.setVisible(not converting)
-        self.ocr.setEnabled(state['canImport'])
+        self.ocr.setEnabled(state['canImport'] and state['ocrAvailable'])
         self.ocr.blockSignals(True)
-        self.ocr.setChecked(state['ocrMode'] == 'auto')
+        self.ocr.setChecked(state['ocrAvailable'] and state['ocrMode'] == 'auto')
         self.ocr.blockSignals(False)
         self.ocr_status.setText(state['ocrStatus'])
         self.ocr_status.setVisible(not converting)
+        self.prepare_ocr.setVisible(not converting and not state['ocrAvailable'])
+        self.prepare_ocr.setEnabled(state['canImport'] or state['ocrPreparing'])
+        self.prepare_ocr.setText('Cancelar preparação do OCR' if state['ocrPreparing'] else 'Preparar OCR · baixar recursos')
         self.source.setText(state['sourceName'])
         self.source.setToolTip(state['sourceName'])
         self.progress.setRange(0, state['progressTotal'])
@@ -89,6 +95,7 @@ class ImportPanel(QWidget):
     que mantém os fluxos existentes de seleção, confirmação e sessões.
     """
     openPdfRequested = Signal()
+    prepareOcrRequested = Signal()
     ocrModeRequested = Signal(bool)
     batchRequested = Signal()
     documentsRequested = Signal()
@@ -106,7 +113,7 @@ class ImportPanel(QWidget):
                            progressCurrent=0, progressTotal=0, feedback='',
                            fontFamily=load_fonts()[0], textScale=self._text_scale(),
                            reducedMotion=visual_settings().reducedMotion,
-                           ocrMode='auto', ocrStatus='OCR local · português e inglês', conversionStage='')
+                           ocrPreparing=False, ocrAvailable=False, ocrMode='off', ocrStatus='OCR local · português e inglês', conversionStage='')
         self.stack = QStackedLayout(self)
         self.stack.setContentsMargins(0, 0, 0, 0)
         self.setFocusPolicy(Qt.StrongFocus)
@@ -156,7 +163,7 @@ class ImportPanel(QWidget):
             if root is None:
                 self._use_fallback('A página QML não foi criada.')
                 return
-            for name in ('openPdfRequested', 'batchRequested', 'documentsRequested', 'cancelRequested', 'ocrModeRequested'):
+            for name in ('openPdfRequested', 'batchRequested', 'documentsRequested', 'cancelRequested', 'ocrModeRequested', 'prepareOcrRequested'):
                 getattr(root, name).connect(getattr(self, name))
             self._ready = True
             self._apply_state()

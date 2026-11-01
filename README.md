@@ -12,6 +12,7 @@ O PDF-Obsidian ajuda a transformar apostilas e documentos de estudo em notas edi
 - OCR local opcional para português e inglês, tabelas e fórmulas, sem substituir silenciosamente texto nativo.
 - Revisão lado a lado do PDF e Markdown, com prévia, navegação por página, zoom e recortes.
 - Tabelas digitais com bordas em Markdown/HTML, com recortes preservados para conferência.
+- Preservação de linhas e recuo em trechos monoespaçados horizontais, usando blocos de código Markdown.
 - Revisão guiada dos avisos, com marcação reversível durante a sessão.
 - Revisão e restauração individual de imagens recorrentes filtradas nas margens; a remoção de outras imagens é manual.
 - Conversão e exportação em lote, sem gravar no vault até a confirmação do usuário.
@@ -47,7 +48,9 @@ python -m pip install --no-deps -e .
 pdf-obsidian
 ```
 
-Para habilitar o OCR, prepare os modelos explicitamente:
+Para habilitar o OCR, clique em **Preparar OCR · baixar recursos** na importação, no lote ou em **Opções**. A interface acompanha a preparação, permite cancelar e libera o OCR sem reiniciar. Essa etapa requer internet e cerca de 3 GB em disco; PDFs não são enviados.
+
+Se preferir preparar pelo terminal:
 
 ```bash
 pdf-obsidian-prepare-ocr
@@ -90,6 +93,8 @@ O processamento PDF tem limites de pixels, memória, CPU, tempo e arquivos. A pr
 ## Limitações conhecidas
 
 - A reconstrução de títulos, listas, figuras e ordem de leitura usa heurísticas; documentos com múltiplas colunas precisam de revisão.
+- Código em fontes proporcionais pode ser unido em parágrafos; confira as quebras de linha com o original. O reconhecimento de código monoespaçado também depende das informações de fonte do PDF.
+- Anotações de links e destinos internos do PDF não são transferidos automaticamente para a navegação da nota. O PDF original permanece disponível junto à exportação.
 - OCR pode errar texto, tabelas ou fórmulas. As imagens originais são mantidas para comparação; confira o resultado antes de exportar.
 - A prévia Qt pode exibir LaTeX como código. Confira a apresentação final no Obsidian.
 - Compatibilidade visual com Obsidian desktop e Android, GPU, leitores de tela e diferentes ambientes Linux ainda depende de validação manual.

@@ -130,6 +130,9 @@ ApplicationWindow {
         id: importPage
         anchors.fill: parent
         visible: !window.backend.hasDocument || window.backend.worker.operation === "convert"
+        ocrPreparing: window.backend.worker.ocrPreparing
+        ocrAvailable: window.backend.worker.ocrAvailable
+        onPrepareOcrRequested: { if (window.backend.worker.ocrPreparing) window.backend.worker.cancelOcrPreparation(); else window.backend.worker.prepareOcr(); }
         ocrMode: window.backend.worker.ocrMode
         ocrStatus: window.backend.worker.recognitionStatus
         conversionStage: window.backend.worker.conversionStage
@@ -138,7 +141,7 @@ ApplicationWindow {
         reducedMotion: theme.reducedMotion
         converting: window.backend.worker.operation === "convert"
         cancelling: window.backend.worker.cancellationRequested
-        canImport: window.backend.worker.workerAvailable && !window.backend.worker.busy
+        canImport: window.backend.worker.workerAvailable && !window.backend.worker.busy && !window.backend.worker.ocrPreparing
         documentsEnabled: !window.backend.worker.busy || window.backend.batchRunning
         documentCount: window.backend.documentCount
         sourceName: window.backend.worker.sourceName
@@ -471,15 +474,16 @@ ApplicationWindow {
         id: preparation; objectName: "preparation"; theme: theme; title: "Preparar conversão em lote"
         footer: DialogActions {
             theme: theme
-            ActionButton { theme: theme; text: "Converter " + window.backend.pendingCount + " documento(s)"; primary: true; enabled: window.backend.pendingCount > 0; onClicked: { preparation.close(); window.backend.beginBatch(); } }
+            ActionButton { theme: theme; text: "Converter " + window.backend.pendingCount + " documento(s)"; primary: true; enabled: window.backend.pendingCount > 0 && !window.backend.worker.ocrPreparing; onClicked: { preparation.close(); window.backend.beginBatch(); } }
             ActionButton { theme: theme; text: "Cancelar"; onClicked: preparation.close() }
             ActionButton { theme: theme; text: "Adicionar PDFs…"; onClicked: window.backend.addPending() }
         }
         width: Math.min(window.width - 48, 700); height: Math.min(window.height - 48, 500)
         ColumnLayout {
             anchors.fill: parent; spacing: 12
-            Toggle { objectName: "batchOcrModeAction"; theme: theme; text: "OCR automático · texto, tabelas e fórmulas"; checked: window.backend.worker.ocrMode === "auto"; enabled: !window.backend.worker.busy; onToggled: window.backend.worker.setOcrMode(checked ? "auto" : "off"); Layout.fillWidth: true }
+            Toggle { objectName: "batchOcrModeAction"; theme: theme; text: "OCR automático · texto, tabelas e fórmulas"; checked: window.backend.worker.ocrAvailable && window.backend.worker.ocrMode === "auto"; enabled: !window.backend.worker.busy && window.backend.worker.ocrAvailable; onToggled: window.backend.worker.setOcrMode(checked ? "auto" : "off"); Layout.fillWidth: true }
             Text { textFormat: Text.PlainText; text: window.backend.worker.recognitionStatus; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+            ActionButton { theme: theme; text: window.backend.worker.ocrPreparing ? "Cancelar preparação do OCR" : "Preparar OCR · baixar recursos"; visible: !window.backend.worker.ocrAvailable; enabled: !window.backend.worker.busy || window.backend.worker.ocrPreparing; onClicked: { if (window.backend.worker.ocrPreparing) window.backend.worker.cancelOcrPreparation(); else window.backend.worker.prepareOcr(); } }
             Text { textFormat: Text.PlainText; text: window.backend.pendingCount + " documento(s). Remova os arquivos que não deseja converter."; color: theme.muted; font.pixelSize: theme.bodySize; wrapMode: Text.Wrap; Layout.fillWidth: true }
             ListView {
                 id: pendingList
@@ -676,8 +680,9 @@ ApplicationWindow {
             ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
             ColumnLayout {
                 id: optionsFields; width: optionsScroll.availableWidth; spacing: 12
-                Toggle { objectName: "nextOcrModeAction"; theme: theme; Layout.fillWidth: true; text: "OCR automático nas próximas conversões"; checked: window.backend.worker.ocrMode === "auto"; enabled: !window.backend.worker.busy; onToggled: window.backend.worker.setOcrMode(checked ? "auto" : "off") }
+                Toggle { objectName: "nextOcrModeAction"; theme: theme; Layout.fillWidth: true; text: "OCR automático nas próximas conversões"; checked: window.backend.worker.ocrAvailable && window.backend.worker.ocrMode === "auto"; enabled: !window.backend.worker.busy && window.backend.worker.ocrAvailable; onToggled: window.backend.worker.setOcrMode(checked ? "auto" : "off") }
                 Text { textFormat: Text.PlainText; Layout.fillWidth: true; text: window.backend.worker.recognitionStatus + " Não altera o documento atual."; color: theme.muted; font.pixelSize: theme.captionSize; wrapMode: Text.WordWrap }
+                ActionButton { theme: theme; text: window.backend.worker.ocrPreparing ? "Cancelar preparação do OCR" : "Preparar OCR · baixar recursos"; visible: !window.backend.worker.ocrAvailable; enabled: !window.backend.worker.busy || window.backend.worker.ocrPreparing; onClicked: { if (window.backend.worker.ocrPreparing) window.backend.worker.cancelOcrPreparation(); else window.backend.worker.prepareOcr(); } }
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }
                 Toggle { objectName: "reducedMotionAction"; theme: theme; Layout.fillWidth: true; text: "Reduzir movimento"; checked: window.backend.visualSettings.reducedMotion; onToggled: window.backend.visualSettings.setReducedMotion(checked) }
                 Rectangle { Layout.fillWidth: true; implicitHeight: 1; color: theme.border }

@@ -1189,9 +1189,12 @@ def test_preview_image_delegates_are_removed_before_replacing_document(quick, ma
 
 
 @pytest.mark.parametrize('tagged', [False, True])
-def test_ocr_mode_is_captured_before_conversion_and_stage_is_displayed(quick, tmp_path, app, tagged):
+def test_ocr_mode_is_captured_before_conversion_and_stage_is_displayed(quick, tmp_path, app, tagged, monkeypatch):
     from pdf_obsidian.recognition import ConversionOptions
     c, window, runtime = quick
+    monkeypatch.setattr('pdf_obsidian.application.resource_status', lambda: (True, 'OCR local pronto', {}))
+    c.application.setOcrMode('auto')
+    app.processEvents()
     page = window.findChild(QObject, 'importPage')
     action = window.findChild(QQuickItem, 'ocrModeAction')
     action.forceActiveFocus()
@@ -1217,12 +1220,15 @@ def test_ocr_mode_is_captured_before_conversion_and_stage_is_displayed(quick, tm
     assert not c.application.conversionStage
     c.application.setOcrMode('auto')
     assert c.application.ocrMode == 'auto'
-    assert page.property('ocrStatus').startswith('OCR indisponível.')
+    assert page.property('ocrStatus').startswith('OCR local pronto')
 
 
-def test_next_conversion_ocr_option_does_not_modify_current_document(quick,tmp_path,app):
+def test_next_conversion_ocr_option_does_not_modify_current_document(quick,tmp_path,app,monkeypatch):
     from PySide6.QtCore import QMetaObject
     c,window,_=quick
+    monkeypatch.setattr('pdf_obsidian.application.resource_status', lambda: (True, 'OCR local pronto', {}))
+    c.application.setOcrMode('auto')
+    app.processEvents()
     c.receive(document(tmp_path,text='Texto original.'))
     doc=c.active.document
     doc.setModified(False)
@@ -1360,3 +1366,40 @@ def test_review_queue_does_not_edit_document(quick, tmp_path):
     assert not c.warnings[0]["reviewed"]
     assert c.active.document.toPlainText() == before
     assert c.active.modified == modified
+
+
+def test_prepare_ocr_action_updates_live_without_restart(quick, app, monkeypatch):
+    c, window, runtime = quick
+    process = SimpleNamespace(poll=lambda: None, pid=123, wait=lambda: None)
+    monkeypatch.setattr('pdf_obsidian.ocr_setup.subprocess.Popen', lambda *a, **kw: process)
+    monkeypatch.setattr('pdf_obsidian.ocr_setup.os.killpg', lambda *args: None)
+    action = window.findChild(QQuickItem, 'prepareOcrAction')
+    assert action is not None and action.isVisible() and action.isEnabled()
+    toggle = window.findChild(QQuickItem, 'ocrModeAction')
+    assert not toggle.isEnabled() and not toggle.property('checked')
+    for name in ('batchOcrModeAction', 'nextOcrModeAction'):
+        other = window.findChild(QQuickItem, name)
+        assert not other.isEnabled() and not other.property('checked')
+    c.application.setOcrMode('auto')
+    assert c.application.ocrMode == 'off'
+    action.clicked.emit()
+    app.processEvents()
+    assert c.application.ocrPreparing
+    assert 'Cancelar' in action.property('text')
+    assert not window.findChild(QQuickItem, 'ocrModeAction').isEnabled()
+    action.clicked.emit()
+    process.poll = lambda: -9
+    c.application.ocr_setup.poll()
+    app.processEvents()
+    assert not c.application.ocrPreparing
+    assert 'Preparar' in action.property('text')
+    assert not toggle.isEnabled() and not toggle.property('checked')
+    monkeypatch.setattr('pdf_obsidian.application.resource_status', lambda: (True, 'OCR local pronto', {}))
+    c.application.ocr_setup.message = ''
+    c.application.ocr_setup.changed.emit()
+    app.processEvents()
+    assert toggle.isEnabled() and not toggle.property('checked')
+    toggle.forceActiveFocus()
+    QTest.keyClick(window, Qt.Key_Space)
+    app.processEvents()
+    assert toggle.property('checked')

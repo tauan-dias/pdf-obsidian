@@ -107,12 +107,14 @@ class Window(SessionWindowMixin, QMainWindow):
         self.reduced_motion_option.toggled.connect(visual_settings().setReducedMotion)
         visual_settings().reducedMotionChanged.connect(self._sync_motion)
         self.next_ocr_option = QCheckBox("OCR automático nas próximas conversões")
+        self.next_ocr_option.setEnabled(not self.application.busy and self.application.ocrAvailable)
         self.next_ocr_option.setChecked(self.application.ocrMode == 'auto')
         self.next_ocr_option.setToolTip(self.application.recognitionStatus + ' Não altera o documento atual.')
         ocr_action = QWidgetAction(menu)
         ocr_action.setDefaultWidget(self.next_ocr_option)
         menu.addSeparator()
         menu.addAction(ocr_action)
+        self.prepare_ocr_action = menu.addAction('Preparar OCR · baixar recursos', self._prepare_ocr)
         self.next_ocr_option.toggled.connect(lambda enabled: self.application.setOcrMode('auto' if enabled else 'off'))
         self.application.conversionOptionsChanged.connect(self._sync_ocr_mode)
         self.export_options.setMenu(menu)
@@ -258,6 +260,7 @@ class Window(SessionWindowMixin, QMainWindow):
         self.application.conversionOptionsChanged.connect(self.update_import_state)
         self.application.conversionStageChanged.connect(self.update_import_state)
         self.welcome.ocrModeRequested.connect(lambda enabled: self.application.setOcrMode('auto' if enabled else 'off'))
+        self.welcome.prepareOcrRequested.connect(self._prepare_ocr)
         self.application.conversionCompleted.connect(self.receive_single_document)
         self.application.cropCompleted.connect(self.receive_crop)
         self.application.conversionCancelled.connect(self.conversion_cancelled)
@@ -271,7 +274,16 @@ class Window(SessionWindowMixin, QMainWindow):
         if self.welcome.load_error:
             self.import_load_failed(self.welcome.load_error)
 
+    def _prepare_ocr(self):
+        if self.application.ocrPreparing:
+            self.application.cancelOcrPreparation()
+        else:
+            self.application.prepareOcr()
+
     def _sync_ocr_mode(self):
+        self.prepare_ocr_action.setText('Cancelar preparação do OCR' if self.application.ocrPreparing else 'Preparar OCR · baixar recursos')
+        self.statusBar().showMessage(self.application.recognitionStatus)
+        self.next_ocr_option.setEnabled(not self.application.busy and self.application.ocrAvailable)
         self.next_ocr_option.setChecked(self.application.ocrMode == 'auto')
         self.next_ocr_option.setToolTip(self.application.recognitionStatus + ' Não altera o documento atual.')
 
@@ -305,7 +317,7 @@ class Window(SessionWindowMixin, QMainWindow):
     def update_controls(self):
         batch_running = hasattr(self, "batch") and self.batch.running
         idle_or_rendering = not batch_running and (not self.busy or self.operation == "render")
-        self.next_ocr_option.setEnabled(idle_or_rendering)
+        self.next_ocr_option.setEnabled(idle_or_rendering and self.application.ocrAvailable)
         if self.switching_session:
             return
         count = len(self.batch.items) if hasattr(self, "batch") else 0
@@ -762,11 +774,12 @@ class Window(SessionWindowMixin, QMainWindow):
         self.welcome.update_state(
             converting=self.operation == 'convert',
             cancelling=self.operation == 'convert' and self.application.cancellationRequested,
-            canImport=not self.busy and self.application.workerAvailable,
+            canImport=not self.busy and self.application.workerAvailable and not self.application.ocrPreparing,
             documentsEnabled=not batch_running and self.operation in (None, 'render'),
             documentCount=count, sourceName=self.application.sourceName,
             progressCurrent=self.application.progressCurrent,
             progressTotal=self.application.progressTotal,
+            ocrPreparing=self.application.ocrPreparing, ocrAvailable=self.application.ocrAvailable,
             ocrMode=self.application.ocrMode, ocrStatus=self.application.recognitionStatus,
             conversionStage=self.application.conversionStage)
 

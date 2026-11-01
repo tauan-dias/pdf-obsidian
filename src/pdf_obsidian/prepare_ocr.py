@@ -1,4 +1,4 @@
-"""Explicit setup command; the application itself never installs or downloads OCR."""
+"""Preparação explícita do OCR, pelo terminal ou pela interface."""
 import argparse
 from pathlib import Path
 import json
@@ -29,8 +29,8 @@ def main():
     root.mkdir(parents=True, exist_ok=True)
     environment = root / 'environment'
     python = environment / 'bin/python'
-    if not python.is_file():
-        venv.EnvBuilder(with_pip=True).create(environment)
+    # Repara também uma criação interrompida antes de instalar o pip.
+    venv.EnvBuilder(with_pip=True).create(environment)
     requirements = Path(__file__).with_name('ocr_requirements.lock')
     command = [str(python), '-m', 'pip', '--isolated', 'install', '--require-hashes', '--only-binary=:all:', '-r', str(requirements),
                '--cache-dir', str(root / 'pip-cache')]
@@ -51,7 +51,7 @@ def main():
                        env=env, check=True)
     verify_resources(root)
     subprocess.run([str(python), '-m', 'pip', 'check'], check=True)
-    print('OCR pronto para uso offline. Reinicie a aplicação se ela já estiver aberta.')
+    print('OCR pronto para uso offline.')
     return 0
 
 

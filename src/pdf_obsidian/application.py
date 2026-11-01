@@ -16,6 +16,7 @@ from .batch import BatchController
 from .exporter import export_document, export_signature, export_intact
 from .worker import run
 from .recognition import ConversionOptions, resource_status
+from .ocr_setup import OcrSetup
 
 
 class WorkerRuntime:
@@ -90,12 +91,14 @@ class ApplicationController(QObject):
         self._busy = False
         self._operation = ''
         self._progress = (0, 0)
-        self.conversion_options = ConversionOptions()
+        self.conversion_options = ConversionOptions('auto' if resource_status()[0] else 'off')
         self._conversion_stage = ''
         self._source = ''
         self._cancellation_requested = False
         self._failed = False
         self._closed = False
+        self.ocr_setup = OcrSetup(self)
+        self.ocr_setup.changed.connect(self._ocr_setup_changed)
         self.poll_timer = QTimer(self)
         self.poll_timer.setInterval(80)
         self.poll_timer.timeout.connect(self.poll)
@@ -109,15 +112,45 @@ class ApplicationController(QObject):
         if self.busy:
             return
         options = ConversionOptions(mode)
+        if mode == 'auto' and not self.ocrAvailable:
+            return
         if options != self.conversion_options:
             self.conversion_options = options
+            if not self.ocrPreparing:
+                self.ocr_setup.message = ''
             self.conversionOptionsChanged.emit()
 
     @Property(str, notify=conversionOptionsChanged)
     def recognitionStatus(self):
+        if self.ocr_setup.message:
+            return self.ocr_setup.message
+        if not self.ocrAvailable:
+            return resource_status()[1]
         if self.ocrMode == 'off':
             return 'OCR desligado. Apenas texto nativo e imagens serão extraídos.'
         return resource_status()[1]
+
+    def _ocr_setup_changed(self):
+        if not self.ocrAvailable:
+            self.conversion_options = ConversionOptions('off')
+        self.conversionOptionsChanged.emit()
+
+    @Property(bool, notify=conversionOptionsChanged)
+    def ocrPreparing(self):
+        return self.ocr_setup.running
+
+    @Property(bool, notify=conversionOptionsChanged)
+    def ocrAvailable(self):
+        return resource_status()[0] and not self.ocrPreparing
+
+    @Slot()
+    def prepareOcr(self):
+        if not self.busy and not self._closed and not (self.batch and self.batch.running):
+            self.ocr_setup.start()
+
+    @Slot()
+    def cancelOcrPreparation(self):
+        self.ocr_setup.cancel()
 
     @Property(str, notify=conversionStageChanged)
     def conversionStage(self):
@@ -195,7 +228,7 @@ class ApplicationController(QObject):
         return self.start_conversion(source.toLocalFile())
 
     def start_conversion(self, source):
-        if not source or self.busy or not self.workerAvailable:
+        if not source or self.busy or self.ocrPreparing or not self.workerAvailable:
             return False
         source = str(Path(source).resolve())
         workspace = self.runtime.allocate_workspace()
@@ -323,6 +356,7 @@ class ApplicationController(QObject):
             return
         self._closed = True
         self.poll_timer.stop()
+        self.ocr_setup.close()
         self.runtime.close()
         self._reset_cancellation()
         self.set_state(False, None)
