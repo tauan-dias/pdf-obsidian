@@ -23,6 +23,7 @@ def resources(tmp_path, monkeypatch):
     (root / 'environment/bin/python').symlink_to(sys.executable)
     (root / 'model.bin').write_bytes(b'synthetic-model')
     manifest = dict(schema=1, versions={'synthetic': '1'}, files={'model.bin': sha256(b'synthetic-model').hexdigest()})
+    monkeypatch.setattr('pdf_obsidian.recognition.trusted_model_hashes', lambda: dict(manifest['files']))
     (root / 'manifest.json').write_text(json.dumps(manifest))
     monkeypatch.setenv('PDF_OBSIDIAN_OCR_DIR', str(root))
     return root
@@ -255,3 +256,40 @@ def test_flat_raster_on_digital_page_keeps_image_without_loading_models(resource
     monkeypatch.setattr(RecognitionClient,'start',lambda *a,**k:pytest.fail('Flat image loaded OCR'))
     result=convert(source,tmp_path/'work')
     assert result.assets and '![' in result.markdown and not result.recognition['pages']
+
+
+def test_rewritten_local_manifest_cannot_authorize_tampered_models(resources):
+    model = resources / 'model.bin'
+    model.write_bytes(b'tampered')
+    path = resources / 'manifest.json'
+    manifest = json.loads(path.read_text())
+    manifest['files']['model.bin'] = sha256(b'tampered').hexdigest()
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(RuntimeError, match='modelos oficiais'):
+        verify_resources(resources)
+
+
+def test_ocr_child_receives_only_reduced_environment(resources, tmp_path, monkeypatch):
+    monkeypatch.setenv('AUDIT_FAKE_SECRET', 'synthetic-only')
+    monkeypatch.setenv('HF_TOKEN', 'synthetic-only')
+    monkeypatch.setenv('PYTHONHOME', '/synthetic-invalid-home')
+    script = tmp_path / 'environment_child.py'
+    script.write_text('''
+import json,os,sys
+assert 'AUDIT_FAKE_SECRET' not in os.environ
+assert 'HF_TOKEN' not in os.environ
+assert 'PYTHONHOME' not in os.environ
+assert os.environ['PYTHONNOUSERSITE']=='1'
+r=json.loads(sys.stdin.readline())
+print(json.dumps(dict(id=r['id'],page=r['page'],blocks=[])),flush=True)
+''')
+    real_popen = subprocess.Popen
+    def launch(command, **kwargs):
+        return real_popen([sys.executable, str(script)], **kwargs)
+    monkeypatch.setattr('pdf_obsidian.recognition.subprocess.Popen', launch)
+    client = RecognitionClient(resources, tmp_path)
+    try:
+        blocks, _ = client.recognize(tmp_path / 'unused.png', 1, 300, 400, lambda: None)
+        assert blocks == []
+    finally:
+        client.close()

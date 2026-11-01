@@ -34,6 +34,8 @@ def prepare(root):
     for path in Path(__file__).with_name('ocr_licenses').glob('*'):
         if path.is_file():
             shutil.copy2(path, licenses / path.name)
+    from .recognition import verify_trusted_models
+    approved = verify_trusted_models(root)
     # Every deployed model/config/dictionary/license participates in integrity checks.
     files = {}
     for path in sorted(models.rglob('*')):
@@ -44,6 +46,8 @@ def prepare(root):
             for chunk in iter(lambda: stream.read(1024 * 1024), b''):
                 digest.update(chunk)
         files[path.relative_to(root).as_posix()] = digest.hexdigest()
+    if files != approved:
+        raise RuntimeError('Conjunto de modelos contém arquivos ausentes ou não aprovados.')
     versions = {name: version(name) for name in ('docling', 'docling-core', 'docling-ibm-models', 'rapidocr', 'onnxruntime', 'torch', 'transformers')}
     manifest = dict(schema=1, versions=versions, sources=records, languages=['pt', 'en'],
                     licenses=['Apache-2.0', 'CDLA-Permissive-2.0'], files=files)

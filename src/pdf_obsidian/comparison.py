@@ -1,13 +1,16 @@
 """Vínculo por página sem modificar o Markdown editável/exportado."""
 from collections import Counter
 from pathlib import Path
+import os
 import re
+import stat
 from uuid import uuid4
 
-from PySide6.QtCore import QPoint, Qt, QUrl
-from PySide6.QtGui import QColor, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument
+from PySide6.QtCore import QPoint, Qt, QUrl, QByteArray, QBuffer, QIODevice
+from PySide6.QtGui import QColor, QTextBlockFormat, QTextCharFormat, QTextCursor, QTextDocument, QImageReader
 
 from .tokens import COLORS
+from .security import MAX_PIXELS
 
 from .formatting import PARSER, parse_aligned
 
@@ -28,6 +31,62 @@ def unique_markers(markdown):
         offset += len(line)
     counts = Counter(int(match[1]) for match in matches)
     return {int(match[1]): match for match in matches if counts[int(match[1])] == 1}
+
+
+class PreviewDocument(QTextDocument):
+    """Carregar somente imagens locais da pasta de anexos da sessão."""
+    def __init__(self, workspace, parent=None):
+        super().__init__(parent)
+        self.assets_root = Path(workspace).resolve() / 'assets'
+
+    def loadResource(self, kind, url):
+        if kind != QTextDocument.ResourceType.ImageResource:
+            return None
+        resolved = self.baseUrl().resolved(url)
+        if not resolved.isLocalFile() or resolved.host():
+            return None
+        path = Path(os.path.abspath(resolved.toLocalFile()))
+        if not path.is_relative_to(self.assets_root):
+            return None
+        # Abrir por descritores sem seguir symlinks; decodificar os mesmos bytes
+        # que foram validados, mesmo se outro processo trocar o caminho.
+        descriptors = []
+        try:
+            fd = os.open(self.assets_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            descriptors.append(fd)
+            parts = path.relative_to(self.assets_root).parts
+            if not parts:
+                return None
+            for part in parts[:-1]:
+                fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+                descriptors.append(fd)
+            fd = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+            descriptors.append(fd)
+            metadata = os.fstat(fd)
+            if not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 64 * 1024**2:
+                return None
+            with os.fdopen(os.dup(fd), 'rb') as stream:
+                data = stream.read(64 * 1024**2 + 1)
+            if len(data) > 64 * 1024**2:
+                return None
+        except (OSError, ValueError):
+            return None
+        finally:
+            for descriptor in reversed(descriptors):
+                os.close(descriptor)
+        buffer = QBuffer()
+        buffer.setData(QByteArray(data))
+        buffer.open(QIODevice.OpenModeFlag.ReadOnly)
+        reader = QImageReader(buffer)
+        # Os anexos da conversão são PNG; não ampliar a superfície de codecs
+        # para formatos ativos ou com referências próprias a outros arquivos.
+        if reader.format() != b'png':
+            return None
+        size = reader.size()
+        if not size.isValid() or size.width() * size.height() > MAX_PIXELS:
+            return None
+        image = reader.read()
+        return image if not image.isNull() else None
 
 
 def preview_document(markdown: str, workspace: Path, parent=None, *, link_color=None):
@@ -63,7 +122,7 @@ def preview_document(markdown: str, workspace: Path, parent=None, *, link_color=
         tokens[page] = token
         return token
 
-    document = QTextDocument(parent)
+    document = PreviewDocument(workspace, parent)
     document.setBaseUrl(QUrl.fromLocalFile(str(workspace) + "/"))
     document.setMarkdown(PAGE_MARKER.sub(replace, markdown))
     alignments = {"center": Qt.AlignmentFlag.AlignHCenter,

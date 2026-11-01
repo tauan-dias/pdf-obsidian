@@ -11,6 +11,15 @@ import sys
 import traceback
 
 
+def reset_inherited_cpu_budget():
+    # O limite cumulativo do worker vale para o parser PDF. O auxiliar possui
+    # prazo por página e orçamento de memória supervisionados pelo cliente;
+    # não herdar um saldo de CPU cumulativo entre todas as páginas OCR.
+    import resource
+    _, hard = resource.getrlimit(resource.RLIMIT_CPU)
+    resource.setrlimit(resource.RLIMIT_CPU, (hard, hard))
+
+
 def block_network():
     original = socket.socket.connect
     original_ex = socket.socket.connect_ex
@@ -119,8 +128,10 @@ class Engine:
 
 
 def main():
+    reset_inherited_cpu_budget()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
+    parser.add_argument('--workspace', type=Path, required=True)
     args = parser.parse_args()
     # A crashed/terminated PDF worker must not leave a multi-GB helper orphaned.
     if sys.platform.startswith('linux'):
@@ -134,6 +145,9 @@ def main():
     root = args.root.resolve()
     os.environ.update(HF_HOME=str(root / 'cache'), XDG_CACHE_HOME=str(root / 'cache'),
                       HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_HUB_DISABLE_TELEMETRY='1')
+    from .sandbox import restrict_network, restrict_ocr_files
+    restrict_network()
+    restrict_ocr_files(root, args.workspace)
     block_network()
     protocol = sys.stdout
     engine = None

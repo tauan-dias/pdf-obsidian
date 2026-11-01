@@ -31,8 +31,8 @@ def main():
     python = environment / 'bin/python'
     if not python.is_file():
         venv.EnvBuilder(with_pip=True).create(environment)
-    requirements = Path(__file__).with_name('ocr_requirements.txt')
-    command = [str(python), '-m', 'pip', 'install', '-r', str(requirements),
+    requirements = Path(__file__).with_name('ocr_requirements.lock')
+    command = [str(python), '-m', 'pip', '--isolated', 'install', '--require-hashes', '--only-binary=:all:', '-r', str(requirements),
                '--cache-dir', str(root / 'pip-cache')]
     if args.offline:
         command.extend(['--no-index', '--find-links', str(args.wheelhouse.resolve())])

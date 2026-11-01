@@ -1,6 +1,11 @@
 """Adaptador PyMuPDF. Chamado somente pelo processo auxiliar na aplicação."""
 from pathlib import Path
+import onnxruntime
+# PyMuPDF 2 inclui ONNX no analisador opcional de layout. Nenhuma telemetria
+# é necessária para a extração geométrica local usada pela aplicação.
+onnxruntime.disable_telemetry_events()
 import pymupdf
+from .security import check_raster
 
 
 class PDFError(ValueError):
@@ -35,7 +40,7 @@ def displayed_tables(page):
     try:
         page.set_rotation(0)
         return [tuple(pymupdf.Rect(table.bbox) * matrix)
-                for table in page.find_tables().tables]
+                for table in page.find_tables(use_layout=False).tables]
     finally:
         page.set_rotation(rotation)
 
@@ -66,6 +71,7 @@ def render(source: Path, page_number: int, destination: Path,
         clip = page.rect if bbox is None else pymupdf.Rect(bbox) & page.rect
         if clip.is_empty or clip.is_infinite:
             raise PDFError("Selecione uma região válida dentro da página.")
+        check_raster(clip.width, clip.height, dpi / 72)
         destination.parent.mkdir(parents=True, exist_ok=True)
         page.get_pixmap(dpi=dpi, clip=clip, alpha=False).save(destination)
         return tuple(page.rect)

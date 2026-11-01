@@ -26,6 +26,29 @@ def resource_directory():
     return Path(os.environ.get('PDF_OBSIDIAN_OCR_DIR', Path(sys.prefix) / 'share/pdf-obsidian/ocr')).resolve()
 
 
+def trusted_model_hashes():
+    return json.loads(Path(__file__).with_name('ocr_trusted_models.json').read_text())
+
+
+def verify_trusted_models(root, check=None):
+    """Autenticar artefatos usando hashes distribuídos com a aplicação."""
+    root = Path(root).resolve()
+    expected = trusted_model_hashes()
+    for relative, digest in expected.items():
+        path = root / relative
+        if not path.resolve().is_relative_to(root) or not path.is_file():
+            raise RuntimeError(f'Modelo oficial ausente ou caminho inválido: {relative}')
+        actual = sha256()
+        with path.open('rb') as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                if check:
+                    check()
+                actual.update(chunk)
+        if actual.hexdigest() != digest:
+            raise RuntimeError(f'Recurso OCR corrompido ou não aprovado: {relative}')
+    return expected
+
+
 def resource_status(root=None, *, require_environment=True):
     root = Path(root) if root is not None else resource_directory()
     try:
@@ -53,6 +76,16 @@ def verify_resources(root, check=None, *, require_environment=True):
     ok, reason, manifest = resource_status(root, require_environment=require_environment)
     if not ok:
         raise RuntimeError(reason)
+    expected_files = trusted_model_hashes()
+    if manifest['files'] != expected_files:
+        raise RuntimeError('Manifesto OCR diverge dos modelos oficiais aprovados. Prepare novamente.')
+    deployed = Path(root) / 'models'
+    if deployed.exists():
+        for path in deployed.rglob('*'):
+            if '.cache' in path.relative_to(deployed).parts:
+                continue
+            if path.is_symlink() or (path.is_file() and path.relative_to(root).as_posix() not in expected_files):
+                raise RuntimeError('Pasta de modelos contém arquivos não aprovados. Prepare em uma pasta limpa.')
     for relative, expected in manifest['files'].items():
         path = Path(root) / relative
         if Path(relative).is_absolute() or '..' in Path(relative).parts or not path.resolve().is_relative_to(Path(root).resolve()):
@@ -89,6 +122,28 @@ def validate_response(data, request_id, page, width, height):
     return blocks
 
 
+def process_tree_rss(pid):
+    """Orçamento inclui eventuais filhos do motor, além do PID principal."""
+    pending, visited, total = [pid], set(), 0
+    while pending:
+        current = pending.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+        try:
+            status = Path(f'/proc/{current}/status').read_text()
+            total += next(int(line.split()[1]) * 1024 for line in status.splitlines()
+                          if line.startswith('VmRSS:'))
+            for task in Path(f'/proc/{current}/task').iterdir():
+                try:
+                    pending.extend(int(value) for value in (task / 'children').read_text().split())
+                except (FileNotFoundError, ProcessLookupError):
+                    pass
+        except (FileNotFoundError, ProcessLookupError, StopIteration):
+            pass
+    return total
+
+
 class RecognitionClient:
     """One persistent child per conversion; models never enter the Qt process."""
     def __init__(self, root, workspace, *, timeout=180, memory_limit=4 * 1024**3):
@@ -109,15 +164,18 @@ class RecognitionClient:
         directory = self.workspace / 'ocr'
         directory.mkdir(exist_ok=True)
         self.log = (directory / 'runtime.log').open('ab')
-        env = dict(os.environ, HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_DATASETS_OFFLINE='1',
+        env = {key: os.environ[key] for key in ('LANG', 'LC_ALL', 'LC_CTYPE', 'TZ') if key in os.environ}
+        env.update(HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1', HF_DATASETS_OFFLINE='1',
                    HF_HUB_DISABLE_TELEMETRY='1', DO_NOT_TRACK='1', OMP_NUM_THREADS='2', MKL_NUM_THREADS='2',
                    TOKENIZERS_PARALLELISM='false', PYTHONUNBUFFERED='1')
+        env.update(PYTHONNOUSERSITE='1', PATH='/usr/bin:/bin')
         # The isolated interpreter imports the application contracts, not Qt.
         env['PYTHONPATH'] = str(Path(__file__).resolve().parent.parent)
         self.process = subprocess.Popen([str(self.root / 'environment/bin/python'), '-m',
-                                         'pdf_obsidian.recognition_engine', '--root', str(self.root)],
+                                         'pdf_obsidian.recognition_engine', '--root', str(self.root),
+                                         '--workspace', str(directory.resolve())],
                                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=self.log,
-                                        env=env, start_new_session=True)
+                                        env=env, cwd=directory, close_fds=True, start_new_session=True)
         self.selector = selectors.DefaultSelector()
         self.selector.register(self.process.stdout, selectors.EVENT_READ)
         self.buffer = b''
@@ -137,8 +195,7 @@ class RecognitionClient:
                 if elapsed > self.timeout:
                     raise TimeoutError(f'OCR excedeu {self.timeout:g} segundos nesta página.')
                 try:
-                    status = Path(f'/proc/{self.process.pid}/status').read_text()
-                    rss = next(int(line.split()[1]) * 1024 for line in status.splitlines() if line.startswith('VmRSS:'))
+                    rss = process_tree_rss(self.process.pid)
                     self.peak_bytes = max(self.peak_bytes, rss)
                     if rss > self.memory_limit:
                         raise MemoryError('OCR atingiu o orçamento de memória; imagem preservada.')

@@ -28,7 +28,7 @@ class WorkerRuntime:
         context = mp.get_context('spawn')
         self.commands, self.events = context.Queue(), context.Queue()
         self.cancel_event = context.Event()
-        self.worker = context.Process(target=run, args=(self.commands, self.events, self.cancel_event), daemon=True)
+        self.worker = context.Process(target=run, args=(self.commands, self.events, self.cancel_event, self.root), daemon=True)
         try:
             self.worker.start()
         except Exception:

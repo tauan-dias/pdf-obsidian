@@ -3,7 +3,11 @@ from pathlib import Path
 import traceback
 
 
-def run(commands, events, cancel):
+def run(commands, events, cancel, workspace=None):
+    from .sandbox import restrict_network
+    restrict_network()
+    from .worker_guard import guard_commands
+    commands = guard_commands(commands, workspace)
     from .converter import convert, make_crop, ConversionCancelled
     from .pdf import render
     from .exporter import export_document, export_signature, export_intact

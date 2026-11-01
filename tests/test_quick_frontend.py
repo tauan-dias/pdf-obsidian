@@ -549,9 +549,22 @@ def test_worker_failure_preserves_document_and_allows_close(quick, tmp_path):
     c, _, runtime = quick
     c.receive(document(tmp_path))
     session = c.active
+    before = session.document.toPlainText()
+    cursor = QTextCursor(session.document)
+    cursor.movePosition(QTextCursor.MoveOperation.End)
+    cursor.insertText('\nEdição preservada após limite de segurança.')
+    edited = session.document.toPlainText()
+    recovery = tmp_path / 'recovery.txt'
+    recovery.write_text('temporário sintético')
     runtime.alive = False
     c.application.poll()
     assert c.active is session and c.active.document.toPlainText()
+    assert session.document.toPlainText() == edited
+    assert recovery.read_text() == 'temporário sintético'
+    session.document.undo()
+    assert session.document.toPlainText() == before
+    session.document.redo()
+    assert session.document.toPlainText() == edited
     assert not c.application.workerAvailable
     c.requestClose()
     assert c._pending is not None

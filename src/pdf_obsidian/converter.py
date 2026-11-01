@@ -8,6 +8,7 @@ import unicodedata
 from .models import AssetInfo, Block, Page, Warning, ConversionResult, FilteredImage
 from .layout import extract_text_block, reconstruct_page, word_inventory
 from .pdf import open_pdf, render
+from .security import check_raster
 from .recognition import ConversionOptions, RecognitionClient, resource_status, resource_directory
 from .recognition_merge import merge_recognition
 from .footers import remove_recurring_footers
@@ -174,6 +175,7 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None, *, opt
                         page.blocks.remove(block)
                 name = f"p{number:04d}-fig{region_index + 1:03d}.png"
                 asset = f"assets/{name}"
+                check_raster(rect.width, rect.height, 150 / 72)
                 pdf_page.get_pixmap(dpi=150, clip=rect, alpha=False).save(workspace / asset)
                 label = {"table": "Tabela", "formula": "Fórmula"}.get(kind, "Figura")
                 if omission:
@@ -213,6 +215,7 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None, *, opt
                         # Limit page raster size, preserving geometry by returning
                         # page-point coordinates from the isolated image pipeline.
                         dpi = min(216, 72 * (12_000_000 / max(1, page.width * page.height)) ** .5)
+                        check_raster(page.width, page.height, dpi / 72)
                         pdf_page.get_pixmap(matrix=pymupdf.Matrix(dpi / 72, dpi / 72), alpha=False).save(image_path)
                         recognized, elapsed = client.recognize(image_path, number, page.width, page.height, check,
                             formula_regions=[tuple(rect) for rect, kind, _ in accepted if kind == 'formula'])
