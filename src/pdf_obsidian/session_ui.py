@@ -107,6 +107,8 @@ class SessionWindowMixin:
         for warning in session.result.warnings:
             self.warning_list.addItem(f"{'Página ' + str(warning.page) if warning.page else 'Revisão'}: {warning.message}")
             self.warning_list.item(self.warning_list.count() - 1).setData(Qt.UserRole, warning.page)
+        self.update_review_labels()
+        self.warning_list.setCurrentRow(session.review_index)
         self.warnings_toggle.setText(f'Avisos ({self.warning_list.count()})')
         self.warnings_toggle.setChecked(view.get('warnings', False))
         self.preview_dirty = True

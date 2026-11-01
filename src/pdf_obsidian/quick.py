@@ -290,7 +290,34 @@ class QuickController(QObject):
 
     @Property('QVariantList', notify=changed)
     def warnings(self):
-        return [{'page': w.page, 'message': w.message} for w in self.active.result.warnings] if self.active else []
+        return [{'page': w.page, 'message': w.message, 'reviewed': i in self.active.reviewed_warnings, 'current': i == self.active.review_index} for i, w in enumerate(self.active.result.warnings)] if self.active else []
+
+    @Slot(int)
+    def reviewWarning(self, index):
+        if not self.active or self.application.operation not in ("", None, "render"):
+            return
+        if not 0 <= index < len(self.active.result.warnings):
+            return
+        self.active.review_index = index
+        page = self.active.result.warnings[index].page
+        if page:
+            self.goPage(page)
+        self.changed.emit()
+
+    @Slot(int)
+    def moveReview(self, delta):
+        self.reviewWarning((self.active.review_index if self.active else -1) + delta)
+
+    @Slot()
+    def toggleReviewed(self):
+        if not self.active or self.active.review_index < 0 or self.application.operation not in ("", None, "render"):
+            return
+        index = self.active.review_index
+        if index in self.active.reviewed_warnings:
+            self.active.reviewed_warnings.remove(index)
+        else:
+            self.active.reviewed_warnings.add(index)
+        self.changed.emit()
 
     @Property(int, notify=changed)
     def filteredCount(self):

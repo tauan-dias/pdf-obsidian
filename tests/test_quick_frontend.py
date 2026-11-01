@@ -990,7 +990,7 @@ def test_general_warning_has_no_fake_page_and_page_warning_navigates(quick, tmp_
     warning_list = window.findChild(QQuickItem, 'warningsList')
     rows = {item.objectName(): item for item in warning_list.property('contentItem').childItems()}
     general = rows.get('warning-0')
-    assert general is not None and not general.isEnabled()
+    assert general is not None and general.isEnabled()
     assert general.property('contentItem').property('text').startswith('Geral · ')
     assert c.page == 1
     specific = rows['warning-2']
@@ -1323,3 +1323,27 @@ def test_ui_audit_undo_redo_shortcuts_from_non_editor_focus_and_document_dirty_b
     app.processEvents()
     assert '**' in c.active.document.toPlainText()
     assert c.documents.rows[0]['status'] == 'Salvo · Não salvo'
+
+
+def test_review_queue_does_not_edit_document(quick, tmp_path):
+    from pdf_obsidian.models import Warning
+    c, _, _ = quick
+    result = document(tmp_path)
+    result.warnings = [Warning(0, "Geral"), Warning(2, "Conferir tabela")]
+    c.receive(result)
+    before = c.active.document.toPlainText()
+    modified = c.active.modified
+    c.moveReview(1)
+    assert c.active.review_index == 0
+    assert c.page == 1
+    c.toggleReviewed()
+    assert c.warnings[0]["reviewed"]
+    c.moveReview(1)
+    assert c.page == 2
+    c.moveReview(1)
+    assert c.active.review_index == 1
+    c.moveReview(-1)
+    c.toggleReviewed()
+    assert not c.warnings[0]["reviewed"]
+    assert c.active.document.toPlainText() == before
+    assert c.active.modified == modified

@@ -25,6 +25,8 @@ class DocumentSession:
     view: dict = field(default_factory=dict)
     exports: dict[str, ExportRecord] = field(default_factory=dict)
     saved_strip_markers: bool = False
+    review_index: int = -1
+    reviewed_warnings: set[int] = field(default_factory=set)
 
     @property
     def modified(self):

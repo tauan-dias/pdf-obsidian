@@ -167,6 +167,13 @@ ApplicationWindow {
             ToolButton { theme: theme; iconName: "image"; text: "Imagens filtradas (" + window.backend.filteredCount + ")"; visible: window.backend.filteredCount > 0; enabled: window.backend.editable; onClicked: { window.backend.openFiltered(); filteredDialog.open(); } }
             ToolButton { theme: theme; iconName: "warning"; text: "Avisos (" + window.backend.warnings.length + ")"; selected: window.warningsExpanded; menuIndicator: true; expanded: window.warningsExpanded; visible: window.backend.warnings.length > 0; onClicked: { window.warningsExpanded = !window.warningsExpanded; window.saveView(); } }
         }
+        RowLayout {
+            visible: window.warningsExpanded
+            ToolButton { theme: theme; text: "Anterior"; onClicked: { window.backend.moveReview(-1); if (window.backend.warnings.some(function(w) { return w.current && w.page > 0; })) window.pdfVisible = true; } }
+            ToolButton { theme: theme; text: "Próximo"; onClicked: { window.backend.moveReview(1); if (window.backend.warnings.some(function(w) { return w.current && w.page > 0; })) window.pdfVisible = true; } }
+            ToolButton { theme: theme; text: "Conferido / reabrir"; onClicked: window.backend.toggleReviewed() }
+            Label { text: window.backend.warnings.filter(function(w) { return !w.reviewed; }).length + " pendentes" }
+        }
         Rectangle {
             visible: window.warningsExpanded && window.backend.warnings.length > 0
             Layout.fillWidth: true; Layout.preferredHeight: Math.min(110, warningsList.contentHeight + 12)
@@ -177,14 +184,15 @@ ApplicationWindow {
                 delegate: ItemDelegate {
                     id: warningRow
                     required property var modelData
+                    required property int index
                     objectName: "warning-" + modelData.page
-                    enabled: modelData.page > 0
+                    enabled: true
                     width: ListView.view.width; height: Math.max(34, warningText.implicitHeight + 12)
-                    contentItem: Text { textFormat: Text.PlainText; id: warningText; text: (warningRow.modelData.page > 0 ? "Página " + warningRow.modelData.page : "Geral") + " · " + warningRow.modelData.message; color: theme.warning; wrapMode: Text.Wrap; font.pixelSize: theme.captionSize }
+                    contentItem: Text { textFormat: Text.PlainText; id: warningText; text: (warningRow.modelData.reviewed ? "✓ " : "") + (warningRow.modelData.current ? "→ " : "") + (warningRow.modelData.page > 0 ? "Página " + warningRow.modelData.page : "Geral") + " · " + warningRow.modelData.message; color: theme.warning; wrapMode: Text.Wrap; font.pixelSize: theme.captionSize }
                     background: Rectangle { color: warningRow.hovered ? theme.raised : "transparent"; border.color: warningRow.visualFocus ? theme.accent : "transparent"; radius: 6 }
                     Accessible.name: warningText.text
-                    Accessible.role: modelData.page > 0 ? Accessible.Button : Accessible.StaticText
-                    onClicked: if (modelData.page > 0) { window.pdfVisible = true; window.backend.goPage(modelData.page); }
+                    Accessible.role: Accessible.Button
+                    onClicked: { if (modelData.page > 0) window.pdfVisible = true; window.backend.reviewWarning(index); }
                 }
             }
         }

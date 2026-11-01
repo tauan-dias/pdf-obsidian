@@ -352,3 +352,15 @@ def test_named_formatting_menus(loaded, app):
     assert 'text-align: center' in window.editor.toPlainText()
     window.editor.undo()
     assert window.editor.toPlainText() == 'Texto de exemplo'
+
+
+def test_widget_review_queue_preserves_markdown(loaded):
+    window, _, _ = loaded
+    before = window.editor.toPlainText()
+    window.move_review(1)
+    assert window.active_session.review_index == 0
+    window.toggle_reviewed()
+    assert 0 in window.active_session.reviewed_warnings
+    window.toggle_reviewed()
+    assert not window.active_session.reviewed_warnings
+    assert window.editor.toPlainText() == before

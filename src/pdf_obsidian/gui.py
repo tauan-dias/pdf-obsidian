@@ -198,6 +198,19 @@ class Window(SessionWindowMixin, QMainWindow):
         self.warnings_toggle.toggled.connect(self.toggle_warnings)
         workspace_layout.addWidget(self.warnings_toggle)
         workspace_layout.addWidget(self.warning_list)
+        self.review_controls = QWidget()
+        review_layout = QHBoxLayout(self.review_controls)
+        for label, action in (
+                ("Anterior", lambda: self.move_review(-1)),
+                ("Próximo", lambda: self.move_review(1)),
+                ("Conferido / reabrir", self.toggle_reviewed)):
+            button = QPushButton(label)
+            button.clicked.connect(action)
+            review_layout.addWidget(button)
+        self.review_count = QLabel()
+        review_layout.addWidget(self.review_count)
+        workspace_layout.addWidget(self.review_controls)
+        self.review_controls.hide()
         self.warning_list.hide()
         self.editor.document().modificationChanged.connect(self.update_modified)
 
@@ -286,6 +299,7 @@ class Window(SessionWindowMixin, QMainWindow):
 
     def toggle_warnings(self, expanded):
         self.warning_list.setVisible(expanded)
+        self.review_controls.setVisible(expanded)
         self.warnings_toggle.setArrowType(Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow)
 
     def update_controls(self):
@@ -566,10 +580,44 @@ class Window(SessionWindowMixin, QMainWindow):
         self.application.start_crop(self.result.source, self.result.workspace, self.displayed_page, bbox)
         self.update_controls()
 
+    def move_review(self, delta):
+        if not self.active_session or self.operation not in (None, "render"):
+            return
+        index = self.active_session.review_index + delta
+        if 0 <= index < self.warning_list.count():
+            self.warning_list.setCurrentRow(index)
+            self.warning_clicked(self.warning_list.item(index))
+
+    def toggle_reviewed(self):
+        session = self.active_session
+        if not session or session.review_index < 0 or self.operation not in (None, "render"):
+            return
+        index = session.review_index
+        if index in session.reviewed_warnings:
+            session.reviewed_warnings.remove(index)
+        else:
+            session.reviewed_warnings.add(index)
+        self.update_review_labels()
+
+    def update_review_labels(self):
+        session = self.active_session
+        if not session:
+            return
+        for index, warning in enumerate(session.result.warnings):
+            prefix = "✓ " if index in session.reviewed_warnings else ""
+            self.warning_list.item(index).setText(
+                prefix + (f"Página {warning.page}: " if warning.page else "Revisão: ") + warning.message)
+        self.review_count.setText(
+            f"{len(session.result.warnings) - len(session.reviewed_warnings)} pendentes")
+
     def warning_clicked(self, item):
-        self.set_pdf_visible(True)
+        if self.operation not in (None, "render"):
+            return
+        if self.active_session:
+            self.active_session.review_index = self.warning_list.row(item)
         page = item.data(Qt.ItemDataRole.UserRole)
         if page and self.operation in (None, "render"):
+            self.set_pdf_visible(True)
             self.request_page(page)
 
     def mark_preview_dirty(self):
