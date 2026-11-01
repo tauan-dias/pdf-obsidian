@@ -105,3 +105,93 @@ def test_spacing_between_independent_spans():
         ]}]}
     block = extract_text_block(raw, 1, 0, Counter())
     assert block.text == "dados pessoais"
+
+
+def test_two_columns_read_left_before_right():
+    lines = []
+    for i in range(4):
+        lines.extend([line(f"Esquerda {i}.", 100 + i * 25, i, right=250),
+                      line(f"Direita {i}.", 100 + i * 25, i + 10, x=320)])
+    blocks = reconstruct(lines)
+    assert [b.text for b in blocks] == (
+        [f"Esquerda {i}." for i in range(4)] + [f"Direita {i}." for i in range(4)])
+
+
+def test_spanning_heading_precedes_columns():
+    lines = [line("Título", 50, size=20)]
+    for i in range(3):
+        lines.extend([line(f"Esquerda {i}.", 100 + i * 25, i, right=250),
+                      line(f"Direita {i}.", 100 + i * 25, i + 10, x=320)])
+    assert reconstruct(lines)[0].text == "Título"
+
+
+def test_overlapping_spanning_figure_keeps_previous_order():
+    from pdf_obsidian.reading_order import regions
+    blocks = [Block("text", str(i), 1, (48, 100+i*25, 250, 112+i*25))
+              for i in range(3)]
+    blocks += [Block("text", str(i), 1, (320, 100+i*25, 550, 112+i*25))
+               for i in range(3)]
+    blocks.append(Block("image", "Figura", 1, (200, 120, 400, 145)))
+    assert len(regions(blocks, 595)) == 1
+
+
+def test_two_columns_keep_all_items_with_unequal_heights():
+    from pdf_obsidian.reading_order import regions
+    blocks = [Block("text", str(i), 1, (48, 100+i*25, 250, 112+i*25))
+              for i in range(5)]
+    blocks += [Block("text", str(i), 1, (320, 100+i*25, 550, 112+i*25))
+               for i in range(3)]
+    assert [b for group in regions(blocks, 595) for b in group] == blocks
+
+
+def test_two_column_pdf_preserves_reading_order(tmp_path):
+    source = tmp_path / "columns.pdf"
+    with pymupdf.open() as doc:
+        page = doc.new_page()
+        for prefix, x in (("LEFT", 40), ("RIGHT", 330)):
+            for i in range(5):
+                page.insert_text((x, 100 + i * 30), f"{prefix}{i}.")
+        doc.save(source)
+    result = convert(source, tmp_path / "work")
+    tokens = [f"{side}{i}" for side in ("LEFT", "RIGHT") for i in range(5)]
+    positions = [result.markdown.index(token) for token in tokens]
+    assert positions == sorted(positions)
+    assert all(result.markdown.count(token) == 1 for token in tokens)
+    assert any("duas colunas" in decision for decision in result.decisions)
+
+
+def test_spanning_separator_splits_column_bands():
+    from pdf_obsidian.reading_order import regions
+    blocks = []
+    for y in (100, 125, 200, 225):
+        blocks += [Block("text", f"L{y}", 1, (48, y, 250, y+12)),
+                   Block("text", f"R{y}", 1, (320, y, 550, y+12))]
+    blocks.append(Block("text", "Heading", 1, (48, 160, 550, 180)))
+    assert [b.text for group in regions(blocks, 595) for b in group] == [
+        "L100", "L125", "R100", "R125", "Heading",
+        "L200", "L225", "R200", "R225"]
+
+
+def test_images_alone_are_not_column_evidence():
+    from pdf_obsidian.reading_order import regions
+    blocks = [Block("image", str(i), 1, (x, 100+i*25, x+150, 112+i*25))
+              for x in (48, 320) for i in range(3)]
+    assert len(regions(blocks, 595)) == 1
+
+
+def test_column_image_stays_between_neighboring_text():
+    lines = []
+    for i in range(4):
+        lines += [line(f"L{i}.", 100+i*30, i, right=250),
+                  line(f"R{i}.", 100+i*30, i+10, x=320)]
+    image = Block("image", "Figura", 1, (50, 115, 240, 120), asset="figure.png")
+    output = reconstruct(lines, [image])
+    assert [b.text for b in output] == [
+        "L0.", "Figura", "L1.", "L2.", "L3.", "R0.", "R1.", "R2.", "R3."]
+
+
+def test_asymmetric_columns():
+    from pdf_obsidian.reading_order import regions
+    blocks = [Block("text", f"{x}:{i}", 1, (x, 100+i*25, right, 112+i*25))
+              for x, right in ((40, 170), (230, 550)) for i in range(4)]
+    assert [b for group in regions(blocks, 595) for b in group] == blocks

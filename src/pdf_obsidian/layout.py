@@ -165,8 +165,22 @@ def _append(previous, following, vocabulary):
     return previous + " " + following, 0
 
 
-def reconstruct_page(page, body_size, heading_sizes, outline, vocabulary):
+def reconstruct_page(page, body_size, heading_sizes, outline, vocabulary, _regional=False):
     """Reconstruir dentro da página, preservando suas âncoras e as imagens."""
+    if not _regional:
+        from copy import copy
+        from .reading_order import regions
+        groups = regions(page.blocks, page.width)
+        if len(groups) > 1:
+            output, decisions = [], []
+            for group in groups:
+                region = copy(page)
+                region.blocks = group
+                blocks, changes = reconstruct_page(region, body_size, heading_sizes, outline, vocabulary, True)
+                output.extend(blocks)
+                decisions.extend(changes)
+            decisions.append(f"Página {page.number}: leitura organizada em regiões de duas colunas.")
+            return output, decisions
     text_blocks = [block for block in page.blocks if block.kind == "text"]
     images = [block for block in page.blocks if block.kind != "text"]
     lines = sorted((line for block in text_blocks for line in block.lines),

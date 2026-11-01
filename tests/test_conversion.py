@@ -138,7 +138,8 @@ def test_table_as_image(tmp_path):
     result = convert(source, tmp_path / "work")
     assert any("Tabela preservada" in warning.message for warning in result.warnings)
     assert "![Tabela" in result.markdown
-    assert "Celula" not in result.markdown
+    assert "<table>" in result.markdown
+    assert result.markdown.count("Celula 0") == 1
     assert any(asset.role == "table" and asset.origin == "detected" for asset in result.assets)
 
 

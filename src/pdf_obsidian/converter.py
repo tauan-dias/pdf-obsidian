@@ -150,8 +150,14 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None, *, opt
             native_blocks = list(page.blocks)
             # Only raster/structured regions not excluded by the authorized margin
             # filter are candidates. Pure native pages never load OCR models.
+            from .native_tables import extract as extract_native_tables
+            try:
+                native_tables = (extract_native_tables(pdf_page, page.blocks)
+                                 if any(kind == "table" for _, kind, _ in accepted) else {})
+            except Exception:
+                native_tables = {}
             candidates = [tuple(rect) for i, (rect, kind, _digest) in enumerate(accepted)
-                          if (number, i) not in filtered and (kind in ('table', 'formula')
+                          if (number, i) not in filtered and tuple(rect) not in native_tables and (kind in ('table', 'formula')
                               or kind == 'image' and raster_has_detail(pdf_page, rect))]
             attempt = options.ocr_mode == 'auto' and bool(candidates)
             # Uma imagem de fundo pode ter camada de texto: evitar duplicar a página inteira.
@@ -182,6 +188,9 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None, *, opt
                     tuple(rect), (page.width, page.height), digest,
                     f"![{label} — página {number}]({asset})",
                 ))
+                if kind == "table" and tuple(rect) in native_tables:
+                    page.blocks.append(Block("recognized_table", native_tables[tuple(rect)], number, tuple(rect), role="recognized"))
+                    decisions.append(f"Página {number}: tabela nativa extraída, com recorte preservado.")
                 if kind == "table":
                     warnings.append(Warning(number, "Tabela preservada como imagem; confira os limites do recorte."))
             if attempt:
@@ -256,6 +265,13 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None, *, opt
         page.blocks = kept
     remove_recurring_footers(pages, decisions, check=check)
     vocabulary = word_inventory(pages)
+    from .reading_order import regions
+    for page in pages:
+        groups = regions(page.blocks, page.width)
+        if len(groups) > 1:
+            page.blocks = [block for group in groups for block in group]
+            warnings[:] = [w for w in warnings if not (
+                w.page == page.number and w.message == "Possíveis colunas: revise a ordem de leitura.")]
     prepare_questions(pages, body, heading_sizes, outline, warnings, decisions, check=check)
     output = [f"# {escape(title)}", "[PDF original](original.pdf)"]
     rendering = QuestionRendering()
@@ -268,6 +284,7 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None, *, opt
     check()
     if initial_hash != file_hash(source):
         raise ValueError("O PDF foi alterado durante a conversão. Abra o arquivo novamente.")
+    warnings.sort(key=lambda warning: warning.page)
     warnings.insert(0, Warning(0, "Conversão heurística: revise títulos, ordem, tabelas e fórmulas antes de exportar."))
     return ConversionResult(source, initial_hash, title, "\n\n".join(output) + "\n", workspace, pages, warnings, decisions, assets, filtered_images, recognition)
 

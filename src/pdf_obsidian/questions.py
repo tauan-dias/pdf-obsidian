@@ -87,9 +87,12 @@ def _question_start(entries, index, question_section):
 
 def prepare_questions(pages, body_size, heading_sizes, outline, warnings, decisions, check=None):
     """Anotar linhas antes de reconstruí-las; contextos podem atravessar páginas."""
-    entries = [(page, line) for page in pages for line in sorted(
-        (line for block in page.blocks if block.kind == 'text' for line in block.lines),
-        key=lambda line: (round(line.bbox[1] / 3), line.bbox[0]))]
+    from .reading_order import regions
+    entries = [(page, line) for page in pages
+               for group in regions(page.blocks, page.width)
+               for line in sorted(
+                   (line for block in group if block.kind == 'text' for line in block.lines),
+                   key=lambda line: (round(line.bbox[1] / 3), line.bbox[0]))]
     segments, active = [], None
     question_section = answer_key = False
     counts = Counter()
