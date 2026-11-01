@@ -10,6 +10,19 @@ from pdf_obsidian.exporter import export_document
 from pdf_obsidian.pdf import PDFError, render
 
 
+def test_filename_newline_keeps_note_title_on_one_line(tmp_path):
+    source = tmp_path / "Título com\nquebra de linha.pdf"
+    with pymupdf.open() as doc:
+        doc.new_page().insert_text((50, 100), "Conteudo preservado.")
+        doc.save(source)
+    original = source.read_bytes()
+    result = convert(source, tmp_path / "work")
+    assert result.title == "Título com quebra de linha"
+    assert result.markdown.startswith("# Título com quebra de linha\n\n")
+    target = export_document(result, tmp_path)
+    assert (target / "original.pdf").read_bytes() == original == source.read_bytes()
+
+
 @pytest.fixture
 def source(tmp_path):
     path = tmp_path / "Apostila de Física.pdf"

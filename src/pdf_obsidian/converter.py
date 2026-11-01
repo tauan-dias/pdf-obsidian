@@ -88,7 +88,7 @@ def convert(source: Path, workspace: Path, progress=None, cancelled=None, *, opt
     initial_hash = file_hash(source)
     with ExitStack() as stack:
         doc = stack.enter_context(open_pdf(source))
-        title = source.stem
+        title = ' '.join(source.stem.split())
         outline = {item[1].strip().casefold(): item[0] for item in doc.get_toc() if item[1].strip()}
         for index, pdf_page in enumerate(doc):
             check()

@@ -5,14 +5,7 @@ import re
 import unicodedata
 
 from .models import Block, TextLine
-
-
-def intersection(a, b):
-    return max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(0, min(a[3], b[3]) - max(a[1], b[1]))
-
-
-def area(box):
-    return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
+from .structured_tables import area, intersection, table_markdown
 
 
 def normalized(text):
@@ -32,9 +25,6 @@ def formula_markdown(text):
     if depth or not text:
         return None
     return '$$\n' + text + '\n$$'
-
-
-from .structured_tables import table_markdown
 
 
 def merge_recognition(page, recognized, native_blocks, regions, decisions, warnings):

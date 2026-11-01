@@ -2,6 +2,15 @@
 import html
 import math
 
+
+def intersection(a, b):
+    return max(0, min(a[2], b[2]) - max(a[0], b[0])) * max(0, min(a[3], b[3]) - max(a[1], b[1]))
+
+
+def area(box):
+    return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
+
+
 def table_markdown(item, native_lines=(), has_header=True):
     rows, cols, cells = item.get('rows'), item.get('cols'), item.get('cells')
     if not isinstance(rows, int) or not isinstance(cols, int) or not (0 < rows <= 500 and 0 < cols <= 100):

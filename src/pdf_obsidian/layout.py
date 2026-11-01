@@ -40,14 +40,18 @@ def extract_text_block(raw, page, source_block, sizes):
                 parts.append(" ")
             parts.append(text)
             previous = span
-        text = re.sub(r"\s+", " ", "".join(parts)).strip()
-        if not text:
+        if not styles:
             continue
         size, font, flags = styles.most_common(1)[0][0]
+        monospace = bool(flags & 8) and abs(dx - 1) <= .01 and abs(dy) <= .01
+        text = "".join(parts).rstrip() if monospace else re.sub(r"\s+", " ", "".join(parts)).strip()
+        if not text.strip():
+            continue
         baseline = median(span.get("origin", (0, raw_line["bbox"][3]))[1]
                           for span in raw_line["spans"] if span["text"].strip())
         lines.append(TextLine(text, tuple(raw_line["bbox"]), size, font, flags,
-                              baseline, source_block, tuple(raw_line.get("dir", (1, 0)))))
+                              baseline, source_block, tuple(raw_line.get("dir", (1, 0))),
+                              role='code' if monospace else None))
     if not lines:
         return None
     weights = Counter()
@@ -115,6 +119,8 @@ def _can_join(group, line, role, level, leading, right_edge, images):
     if (not _same_style(previous, line) and not metadata_continuation) or _image_between(previous, line, images):
         return False
     gap = line.baseline - previous.baseline
+    if group.role == role == 'code':
+        return previous.size * .4 < gap <= max(previous.size, line.size) * 2.1
     if gap <= previous.size * .4 or gap > leading * 1.25:
         return False
     same_block = previous.source_block == line.source_block
@@ -197,7 +203,10 @@ def reconstruct_page(page, body_size, heading_sizes, outline, vocabulary, _regio
         role, level = _role(line, body_size, heading_sizes, outline)
         if paragraphs and _can_join(paragraphs[-1], line, role, level, leading, right_edge, images):
             group = paragraphs[-1]
-            group.text, fixed = _append(group.text, line.text, vocabulary)
+            if role == 'code':
+                group.text, fixed = group.text + '\n' + line.text, 0
+            else:
+                group.text, fixed = _append(group.text, line.text, vocabulary)
             dehyphenated += fixed
             group.lines.append(line)
             group.bbox = union_bbox((group.bbox, line.bbox))

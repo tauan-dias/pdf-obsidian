@@ -16,6 +16,16 @@ from pdf_obsidian.recognition import ConversionOptions, RecognitionClient, resou
 from pdf_obsidian.recognition_merge import merge_recognition, table_markdown, formula_markdown
 
 
+def test_table_uses_native_text_inside_cell_without_losing_punctuation():
+    from pdf_obsidian.models import TextLine
+
+    native = TextLine('Valor: 3.6', (10, 10, 90, 25), 11, 'Helvetica', 0, 22, 0)
+    item = dict(rows=1, cols=2, cells=[
+        dict(r0=0, r1=1, c0=0, c1=1, text='OCR incorreto', bbox=[0, 0, 100, 30]),
+        dict(r0=0, r1=1, c0=1, c1=2, text='Outro valor', bbox=[100, 0, 200, 30])])
+    assert '| Valor: 3.6 | Outro valor |' in table_markdown(item, [native])
+
+
 @pytest.fixture
 def resources(tmp_path, monkeypatch):
     root = tmp_path / 'ocr-resources'

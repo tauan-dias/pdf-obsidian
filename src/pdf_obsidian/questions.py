@@ -99,6 +99,8 @@ def prepare_questions(pages, body_size, heading_sizes, outline, warnings, decisi
     for index, (page, line) in enumerate(entries):
         if check and index % 128 == 0:
             check()
+        if line.role == 'code':
+            continue
         if abs(line.direction[0] - 1) > .01 or abs(line.direction[1]) > .01:
             continue
         name = normalized(line.text).rstrip(':').strip()
@@ -220,6 +222,18 @@ def serialize_blocks(blocks, state, escape, warnings):
             output.append(block.text)
         elif block.kind == 'image':
             output.append(f'![{block.text} — página {block.page}]({block.asset})')
+        elif block.role == 'code':
+            # Espaços na camada textual e recuo apenas geométrico são ambos
+            # comuns. O corpo monoespaçado não passa pelo escape de Markdown.
+            from statistics import median
+            left = min(line.bbox[0] for line in block.lines)
+            widths = [(line.bbox[2] - line.bbox[0]) / len(line.text.expandtabs(4))
+                      for line in block.lines if line.text]
+            unit = median(widths) if widths else block.size * .6
+            content = '\n'.join(' ' * max(0, round((line.bbox[0] - left) / max(unit, .1)))
+                                + line.text for line in block.lines)
+            fence = '`' * max(3, max((len(run) + 1 for run in re.findall(r'`+', content)), default=0))
+            output.append(fence + '\n' + content + '\n' + fence)
         elif block.heading_level or block.role == 'exam_section':
             state.section_level = min(6, block.heading_level + 1) if block.heading_level else 2
             output.append('#' * state.section_level + ' ' + escape(block.text))
